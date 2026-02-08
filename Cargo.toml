@@ -1,0 +1,23 @@
+[package]
+name = "kira-nuclearqc"
+description = "Deterministic CLI for nuclear state and transcriptional plasticity analysis from 10x scRNA-seq MTX inputs."
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+repository = "https://github.com/ARyaskov/kira-nuclearqc"
+keywords = [
+    "bioinformatics",
+    "oncology",
+    "quality-control",
+    "cell",
+    "nucleus"
+]
+categories = [
+    "science",
+    "science::bioinformatics",
+    "command-line-utilities",
+    "algorithms"
+
+[dependencies]
+memmap2 = "0.9"
