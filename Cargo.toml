@@ -18,6 +18,7 @@ categories = [
     "science::bioinformatics",
     "command-line-utilities",
     "algorithms"
+]
 
 [dependencies]
 memmap2 = "0.9"
