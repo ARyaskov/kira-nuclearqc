@@ -34,30 +34,24 @@ fn run() -> Result<(), String> {
 
     let out_dir = resolve_output_dir(&config.out_dir, config.run_mode);
 
-    let (bundle, input_source, shared_bin) = match config.run_mode {
-        RunMode::Standalone => (
-            load_input_tenx(&config.input_dir, config.meta_path.as_deref())
-                .map_err(|e| e.to_string())?,
-            "10x".to_string(),
-            None,
-        ),
-        RunMode::Pipeline => {
-            let resolution = resolve_shared_bin(&config.input_dir).map_err(|e| e.to_string())?;
-            if resolution.exists {
-                (
-                    load_input_organelle(
-                        &config.input_dir,
-                        config.meta_path.as_deref(),
-                        &resolution.path,
-                    )
-                    .map_err(|e| e.to_string())?,
-                    "kira-organelle.bin".to_string(),
-                    Some(resolution.name),
-                )
-            } else {
+    let (bundle, input_source, shared_bin) = if let Some(cache_path) = config.cache_path.as_ref() {
+        if !cache_path.exists() {
+            return Err(format!(
+                "shared cache path does not exist: {}",
+                cache_path.display()
+            ));
+        }
+        match load_input_organelle(&config.input_dir, config.meta_path.as_deref(), cache_path) {
+            Ok(bundle) => (
+                bundle,
+                cache_path.display().to_string(),
+                Some(cache_path.display().to_string()),
+            ),
+            Err(err) => {
                 crate::warn!(
-                    "--run-mode pipeline requested but shared cache file {} was not found; falling back to 10x MTX reading (slower).",
-                    resolution.name
+                    "failed reading shared cache {}: {}; falling back to 10x MTX reading",
+                    cache_path.display(),
+                    err
                 );
                 (
                     load_input_tenx(&config.input_dir, config.meta_path.as_deref())
@@ -65,6 +59,56 @@ fn run() -> Result<(), String> {
                     "10x".to_string(),
                     None,
                 )
+            }
+        }
+    } else {
+        match config.run_mode {
+            RunMode::Standalone => (
+                load_input_tenx(&config.input_dir, config.meta_path.as_deref())
+                    .map_err(|e| e.to_string())?,
+                "10x".to_string(),
+                None,
+            ),
+            RunMode::Pipeline => {
+                let resolution =
+                    resolve_shared_bin(&config.input_dir).map_err(|e| e.to_string())?;
+                if resolution.exists {
+                    match load_input_organelle(
+                        &config.input_dir,
+                        config.meta_path.as_deref(),
+                        &resolution.path,
+                    ) {
+                        Ok(bundle) => (
+                            bundle,
+                            "kira-organelle.bin".to_string(),
+                            Some(resolution.name),
+                        ),
+                        Err(err) => {
+                            crate::warn!(
+                                "failed reading shared cache {}: {}; falling back to 10x MTX reading (slower).",
+                                resolution.path.display(),
+                                err
+                            );
+                            (
+                                load_input_tenx(&config.input_dir, config.meta_path.as_deref())
+                                    .map_err(|e| e.to_string())?,
+                                "10x".to_string(),
+                                None,
+                            )
+                        }
+                    }
+                } else {
+                    crate::warn!(
+                        "--run-mode pipeline requested but shared cache file {} was not found; falling back to 10x MTX reading (slower).",
+                        resolution.name
+                    );
+                    (
+                        load_input_tenx(&config.input_dir, config.meta_path.as_deref())
+                            .map_err(|e| e.to_string())?,
+                        "10x".to_string(),
+                        None,
+                    )
+                }
             }
         }
     };
@@ -215,6 +259,7 @@ fn run() -> Result<(), String> {
 struct RunConfig {
     input_dir: PathBuf,
     out_dir: PathBuf,
+    cache_path: Option<PathBuf>,
     report_mode: ReportMode,
     meta_path: Option<PathBuf>,
     normalize: bool,
@@ -236,6 +281,7 @@ fn parse_args(args: &[String]) -> Result<RunConfig, String> {
     let mut input_dir: Option<PathBuf> = None;
     let mut out_dir: Option<PathBuf> = None;
     let mut report_mode = ReportMode::Cell;
+    let mut cache_path: Option<PathBuf> = None;
     let mut meta_path: Option<PathBuf> = None;
     let mut normalize = false;
     let mut cache_normalized = false;
@@ -258,6 +304,13 @@ fn parse_args(args: &[String]) -> Result<RunConfig, String> {
                     return Err("missing value for --out".to_string());
                 }
                 out_dir = Some(PathBuf::from(&args[i]));
+            }
+            "--cache" => {
+                i += 1;
+                if i >= args.len() {
+                    return Err("missing value for --cache".to_string());
+                }
+                cache_path = Some(PathBuf::from(&args[i]));
             }
             "--mode" => {
                 i += 1;
@@ -307,6 +360,7 @@ fn parse_args(args: &[String]) -> Result<RunConfig, String> {
     Ok(RunConfig {
         input_dir: input_dir.ok_or_else(|| "missing --input".to_string())?,
         out_dir: out_dir.ok_or_else(|| "missing --out".to_string())?,
+        cache_path,
         report_mode,
         meta_path,
         normalize,
@@ -507,46 +561,5 @@ fn immune_like_detected(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_args_default_run_mode_standalone() {
-        let args = vec![
-            "run".to_string(),
-            "--input".to_string(),
-            "data".to_string(),
-            "--out".to_string(),
-            "out".to_string(),
-        ];
-        let parsed = parse_args(&args).unwrap();
-        assert_eq!(parsed.run_mode, RunMode::Standalone);
-    }
-
-    #[test]
-    fn test_parse_args_pipeline_run_mode() {
-        let args = vec![
-            "run".to_string(),
-            "--input".to_string(),
-            "data".to_string(),
-            "--out".to_string(),
-            "out".to_string(),
-            "--run-mode".to_string(),
-            "pipeline".to_string(),
-        ];
-        let parsed = parse_args(&args).unwrap();
-        assert_eq!(parsed.run_mode, RunMode::Pipeline);
-    }
-
-    #[test]
-    fn test_resolve_output_dir_pipeline() {
-        let out = resolve_output_dir(Path::new("/tmp/out"), RunMode::Pipeline);
-        assert_eq!(out, PathBuf::from("/tmp/out/kira-nuclearqc"));
-    }
-
-    #[test]
-    fn test_resolve_output_dir_standalone() {
-        let out = resolve_output_dir(Path::new("/tmp/out"), RunMode::Standalone);
-        assert_eq!(out, PathBuf::from("/tmp/out"));
-    }
-}
+#[path = "../tests/src_inline/main_inline.rs"]
+mod tests;

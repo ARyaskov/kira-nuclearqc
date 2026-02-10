@@ -334,4 +334,5 @@ fn build_features_from_symbols(symbols: &[String]) -> Vec<Feature> {
 }
 
 #[cfg(test)]
+#[path = "../../tests/src_inline/input/tests.rs"]
 mod tests;

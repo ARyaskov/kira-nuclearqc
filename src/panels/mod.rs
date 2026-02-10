@@ -34,4 +34,5 @@ pub struct PanelAudit {
 }
 
 #[cfg(test)]
+#[path = "../../tests/src_inline/panels/tests.rs"]
 mod tests;
