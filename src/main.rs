@@ -155,6 +155,7 @@ fn run() -> Result<(), String> {
         panel_nonzero_fraction: Some(&panel_nonzero_fraction),
         axis_p90: Some(axis_p90),
         scoring_mode: config.scoring_mode,
+        include_ddr: true,
     });
 
     let stage6 = run_stage6(&Stage6Inputs {
@@ -166,6 +167,10 @@ fn run() -> Result<(), String> {
         iaa: &stage4.axes.iaa,
         dfa: &stage4.axes.dfa,
         cea: &stage4.axes.cea,
+        rss: &stage4.axes.rss,
+        drbi: &stage4.axes.drbi,
+        cci: &stage4.axes.cci,
+        trci: &stage4.axes.trci,
         scores: &stage5.scores,
         drivers: &stage4.drivers,
         thresholds: &thresholds,
@@ -211,6 +216,10 @@ fn run() -> Result<(), String> {
         axes_iaa: &stage4.axes.iaa,
         axes_dfa: &stage4.axes.dfa,
         axes_cea: &stage4.axes.cea,
+        ddr_rss: &stage4.axes.rss,
+        ddr_drbi: &stage4.axes.drbi,
+        ddr_cci: &stage4.axes.cci,
+        ddr_trci: &stage4.axes.trci,
 
         scores: &stage5.scores,
         drivers: &stage5.drivers,

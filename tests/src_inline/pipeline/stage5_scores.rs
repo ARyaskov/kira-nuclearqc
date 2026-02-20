@@ -1,4 +1,3 @@
-
 use super::*;
 
 fn dummy_inputs() -> Stage5Inputs<'static> {
@@ -11,6 +10,10 @@ fn dummy_inputs() -> Stage5Inputs<'static> {
         iaa: vec![0.0],
         dfa: vec![0.0],
         cea: vec![0.0],
+        rss: vec![0.2],
+        drbi: vec![0.4],
+        cci: vec![0.6],
+        trci: vec![0.3],
     };
     let drivers = vec![AxisDrivers {
         expressed_genes: 50,
@@ -37,6 +40,7 @@ fn dummy_inputs() -> Stage5Inputs<'static> {
         panel_nonzero_fraction: Some(Box::leak(Box::new(vec![0.5]))),
         axis_p90: Some([0.9, 0.1, 0.1]),
         scoring_mode: NuclearScoringMode::ImmuneAware,
+        include_ddr: true,
     }
 }
 
@@ -45,11 +49,15 @@ fn test_composite_formula() {
     let inputs = dummy_inputs();
     let out = run_stage5(&inputs);
     let nps = clip01(0.45 * 0.5 + 0.35 * 0.2 - 0.20 * 0.3 - 0.20 * 0.4);
-    let ci = clip01(0.55 * 0.4 + 0.45 * 0.3 - 0.15 * 0.5);
-    let rls_base = clip01(0.45 * 0.5 + 0.35 * 0.2 - 0.25 * 0.3 - 0.15 * 0.1);
+    let ci_base = clip01(0.55 * 0.4 + 0.45 * 0.3 - 0.15 * 0.5);
+    let ci = clip01(ci_base + 0.15 * 0.6);
+    let rls_raw =
+        clip01(0.35 * 0.5 + 0.20 * 0.0 + 0.20 * 0.0 + 0.15 * 0.1 + 0.10 * 0.0 - 0.30 * 0.4);
+    let rls_floor = rls_raw.max(0.1);
+    let rls = clip01(rls_floor - 0.25 * 0.2 - 0.20 * 0.3);
     assert!((out.scores.nps[0] - nps).abs() < 1e-6);
     assert!((out.scores.ci[0] - ci).abs() < 1e-6);
-    assert!(out.scores.rls[0] <= rls_base + 1e-6);
+    assert!((out.scores.rls[0] - rls).abs() < 1e-6);
     assert_eq!(out.scores.confidence_breakdown[0].len(), 4);
 }
 
@@ -64,6 +72,10 @@ fn test_confidence_degradation() {
         iaa: vec![0.0],
         dfa: vec![0.0],
         cea: vec![0.0],
+        rss: vec![0.0],
+        drbi: vec![0.0],
+        cci: vec![0.0],
+        trci: vec![0.0],
     };
     let drivers = vec![AxisDrivers::default()];
     let thresholds = ThresholdProfile::default_v1();
@@ -78,6 +90,7 @@ fn test_confidence_degradation() {
         panel_nonzero_fraction: None,
         axis_p90: None,
         scoring_mode: NuclearScoringMode::ImmuneAware,
+        include_ddr: false,
     };
     let out = run_stage5(&inputs);
     assert_eq!(out.scores.confidence[0], 0.0);
@@ -85,7 +98,8 @@ fn test_confidence_degradation() {
 
 #[test]
 fn test_rls_floor_with_high_p90_iaa() {
-    let inputs = dummy_inputs();
+    let mut inputs = dummy_inputs();
+    inputs.include_ddr = false;
     let out = run_stage5(&inputs);
     assert!(out.scores.rls[0] >= 0.1);
 }
@@ -108,6 +122,7 @@ fn test_confidence_not_low_when_structure_high() {
         panel_nonzero_fraction: Some(Box::leak(Box::new(vec![0.5]))),
         axis_p90: Some([0.9, 0.2, 0.2]),
         scoring_mode: NuclearScoringMode::ImmuneAware,
+        include_ddr: true,
     };
     let out = run_stage5(&inputs);
     assert!(out.scores.confidence[0] >= 0.2);

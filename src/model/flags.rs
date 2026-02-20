@@ -11,6 +11,11 @@ pub enum Flag {
     LowConfidence,
     ModelLimitation,
     BiologicalSilence,
+    HighReplicationStress,
+    HrDominantRepair,
+    NhejDominantRepair,
+    ChromatinHypercompact,
+    HighTrConflict,
 }
 
 pub fn flag_order() -> &'static [Flag] {
@@ -24,6 +29,11 @@ pub fn flag_order() -> &'static [Flag] {
         Flag::AmbientRnaRisk,
         Flag::CellCycleConfounder,
         Flag::LowConfidence,
+        Flag::HighReplicationStress,
+        Flag::HrDominantRepair,
+        Flag::NhejDominantRepair,
+        Flag::ChromatinHypercompact,
+        Flag::HighTrConflict,
         Flag::ModelLimitation,
         Flag::BiologicalSilence,
     ]

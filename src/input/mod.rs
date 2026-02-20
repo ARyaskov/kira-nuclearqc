@@ -278,10 +278,7 @@ pub struct SharedBinResolution {
 
 pub fn resolve_shared_bin(input_dir: &Path) -> Result<SharedBinResolution, InputError> {
     let prefix = detect_prefix(input_dir)?;
-    let name = match &prefix {
-        Some(p) => format!("{}.kira-organelle.bin", p),
-        None => "kira-organelle.bin".to_string(),
-    };
+    let name = kira_shared_sc_cache::resolve_shared_cache_filename(prefix.as_deref());
     let path = input_dir.join(&name);
     let exists = path.exists();
     Ok(SharedBinResolution {
@@ -293,30 +290,7 @@ pub fn resolve_shared_bin(input_dir: &Path) -> Result<SharedBinResolution, Input
 }
 
 pub fn detect_prefix(input_dir: &Path) -> Result<Option<String>, InputError> {
-    let mut prefixes = std::collections::BTreeSet::new();
-    for entry in std::fs::read_dir(input_dir)? {
-        let entry = entry?;
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        for suffix in [
-            "_matrix.mtx",
-            "_matrix.mtx.gz",
-            "_features.tsv",
-            "_features.tsv.gz",
-            "_barcodes.tsv",
-            "_barcodes.tsv.gz",
-        ] {
-            if let Some(prefix) = name.strip_suffix(suffix) {
-                if !prefix.is_empty() {
-                    prefixes.insert(prefix.to_string());
-                }
-            }
-        }
-    }
-    if let Some(prefix) = prefixes.into_iter().next() {
-        return Ok(Some(prefix));
-    }
-    Ok(None)
+    kira_scio::detect_prefix(input_dir).map_err(|e| InputError::InvalidInput(e.to_string()))
 }
 
 fn build_features_from_symbols(symbols: &[String]) -> Vec<Feature> {

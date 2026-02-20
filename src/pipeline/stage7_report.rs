@@ -57,6 +57,10 @@ pub struct Stage7Input<'a> {
     pub axes_iaa: &'a [f32],
     pub axes_dfa: &'a [f32],
     pub axes_cea: &'a [f32],
+    pub ddr_rss: &'a [f32],
+    pub ddr_drbi: &'a [f32],
+    pub ddr_cci: &'a [f32],
+    pub ddr_trci: &'a [f32],
 
     pub scores: &'a CompositeScores,
     pub drivers: &'a ScoreDrivers,
@@ -152,6 +156,10 @@ fn write_cell_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()> {
         "top_program_panel",
         "top_program_share",
         "activation_mode",
+        "rss",
+        "drbi",
+        "cci",
+        "trci",
     ]
     .join("\t");
     writeln!(w, "{}", header)?;
@@ -221,6 +229,10 @@ fn write_cell_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()> {
             top_panel,
             format_f32_6(top_share),
             input.activation_mode.clone(),
+            format_f32_6(input.ddr_rss[cell]),
+            format_f32_6(input.ddr_drbi[cell]),
+            format_f32_6(input.ddr_cci[cell]),
+            format_f32_6(input.ddr_trci[cell]),
         ]
         .join("\t");
         writeln!(w, "{}", row)?;
@@ -238,7 +250,7 @@ fn write_sample_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()>
     header.push_str("sample\tn_cells\t");
     for name in [
         "a1_tbi", "a2_rci", "a3_pds", "a4_trs", "a5_nsai", "a6_iaa", "a7_dfa", "a8_cea", "c1_nps",
-        "c2_ci", "c3_rls",
+        "c2_ci", "c3_rls", "rss", "drbi", "cci", "trci",
     ] {
         header.push_str(name);
         header.push_str("_median\t");
@@ -281,6 +293,10 @@ fn write_sample_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()>
         let mut c1 = Vec::with_capacity(n);
         let mut c2 = Vec::with_capacity(n);
         let mut c3 = Vec::with_capacity(n);
+        let mut d1 = Vec::with_capacity(n);
+        let mut d2 = Vec::with_capacity(n);
+        let mut d3 = Vec::with_capacity(n);
+        let mut d4 = Vec::with_capacity(n);
 
         let mut trs_tail = 0usize;
         let mut nps_tail = 0usize;
@@ -300,6 +316,10 @@ fn write_sample_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()>
             c1.push(input.scores.nps[cell]);
             c2.push(input.scores.ci[cell]);
             c3.push(input.scores.rls[cell]);
+            d1.push(input.ddr_rss[cell]);
+            d2.push(input.ddr_drbi[cell]);
+            d3.push(input.ddr_cci[cell]);
+            d4.push(input.ddr_trci[cell]);
 
             if input.axes_trs[cell] >= 0.75 {
                 trs_tail += 1;
@@ -335,6 +355,10 @@ fn write_sample_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()>
             stats(&c1),
             stats(&c2),
             stats(&c3),
+            stats(&d1),
+            stats(&d2),
+            stats(&d3),
+            stats(&d4),
         ] {
             line.push_str(&format_f32_6(v.0));
             line.push('\t');
@@ -499,6 +523,12 @@ fn build_summary(input: &Stage7Input<'_>, mode: ReportMode) -> SummaryData {
         low_expr_fraction: bool_fraction(&low_expr),
 
         axes,
+        ddr_metrics: vec![
+            named_stats("rss", input.ddr_rss),
+            named_stats("drbi", input.ddr_drbi),
+            named_stats("cci", input.ddr_cci),
+            named_stats("trci", input.ddr_trci),
+        ],
         composites,
         regimes,
 
@@ -595,6 +625,18 @@ fn render_pipeline_step_json(summary: &SummaryData) -> String {
     push_kv_str(&mut out, "regime_column", "regime");
     out.push(',');
     push_kv_str(&mut out, "confidence_column", "confidence");
+    out.push(',');
+    out.push_str("\"rss\":");
+    push_str_val(&mut out, "rss");
+    out.push(',');
+    out.push_str("\"drbi\":");
+    push_str_val(&mut out, "drbi");
+    out.push(',');
+    out.push_str("\"cci\":");
+    push_str_val(&mut out, "cci");
+    out.push(',');
+    out.push_str("\"trci\":");
+    push_str_val(&mut out, "trci");
     out.push_str("},");
 
     let nps_median = stat_median(&summary.composites, "c1_nps");
@@ -870,6 +912,11 @@ fn flag_name(flag: Flag) -> &'static str {
         Flag::AmbientRnaRisk => "AMBIENT_RNA_RISK",
         Flag::CellCycleConfounder => "CELL_CYCLE_CONFOUNDER",
         Flag::LowConfidence => "LOW_CONFIDENCE",
+        Flag::HighReplicationStress => "HIGH_REPLICATION_STRESS",
+        Flag::HrDominantRepair => "HR_DOMINANT_REPAIR",
+        Flag::NhejDominantRepair => "NHEJ_DOMINANT_REPAIR",
+        Flag::ChromatinHypercompact => "CHROMATIN_HYPERCOMPACT",
+        Flag::HighTrConflict => "HIGH_TR_CONFLICT",
         Flag::ModelLimitation => "MODEL_LIMITATION",
         Flag::BiologicalSilence => "BIOLOGICAL_SILENCE",
     }

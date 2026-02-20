@@ -43,6 +43,7 @@ pub struct SummaryData {
     pub low_expr_fraction: f32,
 
     pub axes: Vec<NamedStats>,
+    pub ddr_metrics: Vec<NamedStats>,
     pub composites: Vec<NamedStats>,
 
     pub regimes: Vec<RegimeStat>,

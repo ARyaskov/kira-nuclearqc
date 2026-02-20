@@ -136,6 +136,15 @@ pub fn render_summary_json(data: &SummaryData) -> String {
         out.push('}');
     }
     out.push_str("],");
+    out.push_str("\"ddr_metrics\":{");
+    push_kv_obj_stats(&mut out, "rss", &data.ddr_metrics);
+    out.push(',');
+    push_kv_obj_stats(&mut out, "drbi", &data.ddr_metrics);
+    out.push(',');
+    push_kv_obj_stats(&mut out, "cci", &data.ddr_metrics);
+    out.push(',');
+    push_kv_obj_stats(&mut out, "trci", &data.ddr_metrics);
+    out.push_str("},");
     out.push_str("\"composites\":[");
     for (i, s) in data.composites.iter().enumerate() {
         if i > 0 {
@@ -221,6 +230,27 @@ fn stat_p90(stats: &[crate::report::NamedStats], name: &str) -> f32 {
     for s in stats {
         if s.name == name {
             return s.p90;
+        }
+    }
+    0.0
+}
+
+fn push_kv_obj_stats(out: &mut String, key: &str, stats: &[crate::report::NamedStats]) {
+    out.push('"');
+    out.push_str(key);
+    out.push_str("\":{");
+    push_kv_num(out, "median", stat_median(stats, key) as f64);
+    out.push(',');
+    push_kv_num(out, "p90", stat_p90(stats, key) as f64);
+    out.push(',');
+    push_kv_num(out, "p99", stat_p99(stats, key) as f64);
+    out.push('}');
+}
+
+fn stat_p99(stats: &[crate::report::NamedStats], name: &str) -> f32 {
+    for s in stats {
+        if s.name == name {
+            return s.p99;
         }
     }
     0.0

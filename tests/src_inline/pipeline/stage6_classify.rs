@@ -1,4 +1,3 @@
-
 use super::*;
 
 struct TestInputs {
@@ -10,6 +9,10 @@ struct TestInputs {
     iaa: Vec<f32>,
     dfa: Vec<f32>,
     cea: Vec<f32>,
+    rss: Vec<f32>,
+    drbi: Vec<f32>,
+    cci: Vec<f32>,
+    trci: Vec<f32>,
     scores: CompositeScores,
     drivers: Vec<AxisDrivers>,
     thresholds: ThresholdProfile,
@@ -32,6 +35,10 @@ impl TestInputs {
             iaa: &self.iaa,
             dfa: &self.dfa,
             cea: &self.cea,
+            rss: &self.rss,
+            drbi: &self.drbi,
+            cci: &self.cci,
+            trci: &self.trci,
             scores: &self.scores,
             drivers: &self.drivers,
             thresholds: &self.thresholds,
@@ -56,6 +63,10 @@ fn base_inputs() -> TestInputs {
         iaa: vec![0.2],
         dfa: vec![0.2],
         cea: vec![0.2],
+        rss: vec![0.2],
+        drbi: vec![0.2],
+        cci: vec![0.2],
+        trci: vec![0.2],
         scores: CompositeScores {
             nps: vec![0.2],
             ci: vec![0.2],
@@ -165,6 +176,10 @@ fn test_flags() {
     inputs.proliferation_program_share = Some(vec![0.9]);
     inputs.pds[0] = 0.9;
     inputs.nsai[0] = 0.9;
+    inputs.rss[0] = 0.8;
+    inputs.drbi[0] = 0.9;
+    inputs.cci[0] = 0.8;
+    inputs.trci[0] = 0.8;
 
     let out = run_stage6(&inputs.as_inputs());
     let flags = &out[0].flags;
@@ -177,6 +192,23 @@ fn test_flags() {
     assert!(flags.contains(&Flag::AmbientRnaRisk));
     assert!(flags.contains(&Flag::CellCycleConfounder));
     assert!(flags.contains(&Flag::LowConfidence));
+    assert!(flags.contains(&Flag::HighReplicationStress));
+    assert!(flags.contains(&Flag::HrDominantRepair));
+    assert!(flags.contains(&Flag::ChromatinHypercompact));
+    assert!(flags.contains(&Flag::HighTrConflict));
+}
+
+#[test]
+fn test_ddr_repair_bias_flags() {
+    let mut inputs = base_inputs();
+    inputs.drbi[0] = 0.2;
+    let out = run_stage6(&inputs.as_inputs());
+    assert!(out[0].flags.contains(&Flag::NhejDominantRepair));
+
+    let mut inputs = base_inputs();
+    inputs.drbi[0] = 0.9;
+    let out = run_stage6(&inputs.as_inputs());
+    assert!(out[0].flags.contains(&Flag::HrDominantRepair));
 }
 
 #[test]

@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::panels::defs::{PanelDef, PanelGroup};
 use crate::panels::{Panel, PanelScores, PanelSet};
@@ -171,4 +170,8 @@ fn test_determinism() {
     assert_eq!(a.axes.pds[0].to_bits(), b.axes.pds[0].to_bits());
     assert_eq!(a.axes.trs[0].to_bits(), b.axes.trs[0].to_bits());
     assert_eq!(a.axes.nsai[0].to_bits(), b.axes.nsai[0].to_bits());
+    assert_eq!(a.axes.rss[0].to_bits(), b.axes.rss[0].to_bits());
+    assert_eq!(a.axes.drbi[0].to_bits(), b.axes.drbi[0].to_bits());
+    assert_eq!(a.axes.cci[0].to_bits(), b.axes.cci[0].to_bits());
+    assert_eq!(a.axes.trci[0].to_bits(), b.axes.trci[0].to_bits());
 }

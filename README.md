@@ -34,7 +34,7 @@ kira-nuclearqc run --input <dir> --out <outdir> [--mode cell|sample] [--run-mode
 If `--run-mode pipeline` is used and shared cache is not found, the tool logs a warning and falls back to 10x MTX reading.
 
 ## Shared Cache
-- Cache format specification: `CACHE_FILE.md`
+- Cache format specification: `https://github.com/ARyaskov/kira-shared-sc-cache/blob/main/CACHE_FILE.md`
 
 ## Determinism
 - Stable ordering for panels, regimes, and outputs

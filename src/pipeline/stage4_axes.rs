@@ -1,4 +1,5 @@
 use crate::model::axes::{Axes, AxisDrivers, AxisFlags, clip01};
+use crate::model::ddr::{DdrMetrics, compute_ddr_metrics};
 use crate::model::thresholds::{AxisActivationMode, ThresholdProfile};
 use crate::panels::defs::PanelGroup;
 use crate::panels::{PanelScores, PanelSet};
@@ -10,6 +11,7 @@ pub struct Stage4Output {
     pub axes: Axes,
     pub drivers: Vec<AxisDrivers>,
     pub flags: Vec<AxisFlags>,
+    pub ddr: DdrMetrics,
 }
 
 pub fn run_stage4(
@@ -47,6 +49,10 @@ pub fn run_stage4(
         iaa: vec![0.0; n_cells],
         dfa: vec![0.0; n_cells],
         cea: vec![0.0; n_cells],
+        rss: vec![0.0; n_cells],
+        drbi: vec![0.0; n_cells],
+        cci: vec![0.0; n_cells],
+        trci: vec![0.0; n_cells],
     };
     let mut drivers = vec![AxisDrivers::default(); n_cells];
     let mut flags = vec![AxisFlags::default(); n_cells];
@@ -58,9 +64,25 @@ pub fn run_stage4(
     let mut dfa_raw = vec![0.0f32; n_cells];
     let mut cea_raw = vec![0.0f32; n_cells];
 
+    let replication_stress_panel = find_panel(panel_set, "replication_stress_genes");
+    let checkpoint_activation_panel = find_panel(panel_set, "checkpoint_activation");
+    let replication_fork_stability_panel = find_panel(panel_set, "replication_fork_stability");
+    let dna_repair_hr_panel = find_panel(panel_set, "dna_repair_hr");
+    let dna_repair_nhej_panel = find_panel(panel_set, "dna_repair_nhej");
+    let chromatin_compaction_panel = find_panel(panel_set, "chromatin_compaction");
+    let chromatin_open_state_panel = find_panel(panel_set, "chromatin_open_state");
+
     let iaa_panel = find_panel(panel_set, "immune_activation");
     let dfa_panel = find_panel(panel_set, "differentiation_flux");
     let cea_panel = find_panel(panel_set, "clonal_engagement");
+
+    let mut replication_stress_raw = vec![0.0f32; n_cells];
+    let mut checkpoint_activation_raw = vec![0.0f32; n_cells];
+    let mut replication_fork_stability_raw = vec![0.0f32; n_cells];
+    let mut hr_raw = vec![0.0f32; n_cells];
+    let mut nhej_raw = vec![0.0f32; n_cells];
+    let mut chromatin_compaction_raw = vec![0.0f32; n_cells];
+    let mut chromatin_open_raw = vec![0.0f32; n_cells];
 
     for cell in 0..n_cells {
         if let Some(p) = iaa_panel {
@@ -72,11 +94,41 @@ pub fn run_stage4(
         if let Some(p) = cea_panel {
             cea_raw[cell] = panel_scores.panel_sum[cell][p];
         }
+        if let Some(p) = replication_stress_panel {
+            replication_stress_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = checkpoint_activation_panel {
+            checkpoint_activation_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = replication_fork_stability_panel {
+            replication_fork_stability_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = dna_repair_hr_panel {
+            hr_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = dna_repair_nhej_panel {
+            nhej_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = chromatin_compaction_panel {
+            chromatin_compaction_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
+        if let Some(p) = chromatin_open_state_panel {
+            chromatin_open_raw[cell] = panel_scores.panel_sum[cell][p];
+        }
     }
 
     let iaa_rel = compute_relative_scores(&iaa_raw, thresholds);
     let dfa_rel = compute_relative_scores(&dfa_raw, thresholds);
     let cea_rel = compute_relative_scores(&cea_raw, thresholds);
+    let replication_stress_norm = compute_relative_scores(&replication_stress_raw, thresholds);
+    let checkpoint_activation_norm =
+        compute_relative_scores(&checkpoint_activation_raw, thresholds);
+    let replication_fork_stability_norm =
+        compute_relative_scores(&replication_fork_stability_raw, thresholds);
+    let hr_norm = compute_relative_scores(&hr_raw, thresholds);
+    let nhej_norm = compute_relative_scores(&nhej_raw, thresholds);
+    let chromatin_compaction_norm = compute_relative_scores(&chromatin_compaction_raw, thresholds);
+    let chromatin_open_norm = compute_relative_scores(&chromatin_open_raw, thresholds);
 
     for cell in 0..n_cells {
         value_buf.clear();
@@ -156,8 +208,6 @@ pub fn run_stage4(
         axes.dfa[cell] = dfa;
         axes.cea[cell] = cea;
 
-        let axis_variance = axis_variance(tbi, rci, pds, trs, nsai, iaa, dfa, cea);
-
         drivers[cell] = AxisDrivers {
             expressed_genes,
             gene_entropy,
@@ -169,7 +219,7 @@ pub fn run_stage4(
             iaa_raw: iaa_raw[cell],
             dfa_raw: dfa_raw[cell],
             cea_raw: cea_raw[cell],
-            axis_variance,
+            axis_variance: 0.0,
         };
         flags[cell] = AxisFlags {
             low_tf_signal: low_tf,
@@ -178,10 +228,45 @@ pub fn run_stage4(
         let _ = n_panels; // silence unused variable warning if panels unused in build.
     }
 
+    let ddr = compute_ddr_metrics(
+        &replication_stress_norm,
+        &checkpoint_activation_norm,
+        &replication_fork_stability_norm,
+        &hr_norm,
+        &nhej_norm,
+        &chromatin_compaction_norm,
+        &chromatin_open_norm,
+        &axes.tbi,
+    );
+
+    for cell in 0..n_cells {
+        axes.rss[cell] = ddr.rss[cell];
+        axes.drbi[cell] = ddr.drbi[cell];
+        axes.cci[cell] = ddr.cci[cell];
+        axes.trci[cell] = ddr.trci[cell];
+
+        let axis_variance = axis_variance(
+            axes.tbi[cell],
+            axes.rci[cell],
+            axes.pds[cell],
+            axes.trs[cell],
+            axes.nsai[cell],
+            axes.iaa[cell],
+            axes.dfa[cell],
+            axes.cea[cell],
+            axes.rss[cell],
+            axes.drbi[cell],
+            axes.cci[cell],
+            axes.trci[cell],
+        );
+        drivers[cell].axis_variance = axis_variance;
+    }
+
     Stage4Output {
         axes,
         drivers,
         flags,
+        ddr,
     }
 }
 
@@ -227,8 +312,14 @@ fn axis_variance(
     iaa: f32,
     dfa: f32,
     cea: f32,
+    rss: f32,
+    drbi: f32,
+    cci: f32,
+    trci: f32,
 ) -> f32 {
-    let vals = [tbi, rci, pds, trs, nsai, iaa, dfa, cea];
+    let vals = [
+        tbi, rci, pds, trs, nsai, iaa, dfa, cea, rss, drbi, cci, trci,
+    ];
     let mut mean = 0f64;
     for v in vals {
         mean += v as f64;

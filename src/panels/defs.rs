@@ -27,6 +27,23 @@ const DEVELOPMENTAL_CORE: &[&str] = &["SOX9", "PAX6", "GATA3", "TBX5"];
 const IMMUNE_ACTIVATION: &[&str] = &["CD69", "CD83", "HLA-DRA", "HLA-DRB1", "CD74"];
 const DIFFERENTIATION_FLUX: &[&str] = &["BCL6", "IRF4", "MYC"];
 const CLONAL_ENGAGEMENT: &[&str] = &["HNRNPA1", "SRSF1", "HNRNPC", "RPLP0", "RPL13A"];
+const REPLICATION_STRESS_GENES: &[&str] = &[
+    "ATR", "CHEK1", "CHEK2", "RPA1", "RPA2", "RPA3", "RAD17", "CLSPN", "TIMELESS", "TIPIN",
+];
+const DNA_REPAIR_HR: &[&str] = &[
+    "BRCA1", "BRCA2", "RAD51", "RAD51B", "RAD51C", "RAD51D", "PALB2", "BARD1", "RAD52",
+];
+const DNA_REPAIR_NHEJ: &[&str] = &["LIG4", "XRCC4", "XRCC5", "XRCC6", "PRKDC", "NHEJ1", "PNKP"];
+const CHROMATIN_COMPACTION: &[&str] = &[
+    "CBX1", "CBX3", "CBX5", "SUV39H1", "SUV39H2", "SETDB1", "EHMT2",
+];
+const CHROMATIN_OPEN_STATE: &[&str] = &[
+    "SMARCA4", "SMARCB1", "ARID1A", "ARID1B", "KDM6A", "KAT2B", "EP300",
+];
+const REPLICATION_FORK_STABILITY: &[&str] = &[
+    "MCM2", "MCM3", "MCM4", "MCM5", "MCM6", "MCM7", "CDC45", "GINS1",
+];
+const CHECKPOINT_ACTIVATION: &[&str] = &["ATM", "ATR", "CHEK1", "CHEK2", "TP53", "CDKN1A"];
 
 const BUILTIN_PANELS: &[PanelDef] = &[
     PanelDef {
@@ -82,6 +99,48 @@ const BUILTIN_PANELS: &[PanelDef] = &[
         name: "Clonal Engagement",
         group: PanelGroup::Program,
         genes: CLONAL_ENGAGEMENT,
+    },
+    PanelDef {
+        id: "replication_stress_genes",
+        name: "Replication Stress",
+        group: PanelGroup::Confounder,
+        genes: REPLICATION_STRESS_GENES,
+    },
+    PanelDef {
+        id: "dna_repair_hr",
+        name: "DNA Repair HR",
+        group: PanelGroup::Confounder,
+        genes: DNA_REPAIR_HR,
+    },
+    PanelDef {
+        id: "dna_repair_nhej",
+        name: "DNA Repair NHEJ",
+        group: PanelGroup::Confounder,
+        genes: DNA_REPAIR_NHEJ,
+    },
+    PanelDef {
+        id: "chromatin_compaction",
+        name: "Chromatin Compaction",
+        group: PanelGroup::Confounder,
+        genes: CHROMATIN_COMPACTION,
+    },
+    PanelDef {
+        id: "chromatin_open_state",
+        name: "Chromatin Open State",
+        group: PanelGroup::Confounder,
+        genes: CHROMATIN_OPEN_STATE,
+    },
+    PanelDef {
+        id: "replication_fork_stability",
+        name: "Replication Fork Stability",
+        group: PanelGroup::Confounder,
+        genes: REPLICATION_FORK_STABILITY,
+    },
+    PanelDef {
+        id: "checkpoint_activation",
+        name: "Checkpoint Activation",
+        group: PanelGroup::Confounder,
+        genes: CHECKPOINT_ACTIVATION,
     },
 ];
 

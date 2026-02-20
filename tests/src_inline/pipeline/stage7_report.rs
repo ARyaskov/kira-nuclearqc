@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::model::drivers::ScoreDrivers;
 use crate::model::flags::Flag;
@@ -35,6 +34,10 @@ fn build_input() -> Stage7Input<'static> {
     let axes_iaa = vec![0.1, 0.2];
     let axes_dfa = vec![0.1, 0.2];
     let axes_cea = vec![0.1, 0.2];
+    let ddr_rss = vec![0.2, 0.3];
+    let ddr_drbi = vec![0.4, 0.5];
+    let ddr_cci = vec![0.1, 0.2];
+    let ddr_trci = vec![0.3, 0.4];
 
     let scores = CompositeScores {
         nps: vec![0.1, 0.2],
@@ -109,6 +112,10 @@ fn build_input() -> Stage7Input<'static> {
         axes_iaa: Box::leak(Box::new(axes_iaa)),
         axes_dfa: Box::leak(Box::new(axes_dfa)),
         axes_cea: Box::leak(Box::new(axes_cea)),
+        ddr_rss: Box::leak(Box::new(ddr_rss)),
+        ddr_drbi: Box::leak(Box::new(ddr_drbi)),
+        ddr_cci: Box::leak(Box::new(ddr_cci)),
+        ddr_trci: Box::leak(Box::new(ddr_trci)),
 
         scores: Box::leak(Box::new(scores)),
         drivers: Box::leak(Box::new(drivers)),
@@ -157,6 +164,7 @@ fn test_json_schema() {
     assert!(text.contains("\"input\""));
     assert!(text.contains("\"qc\""));
     assert!(text.contains("\"regimes\""));
+    assert!(text.contains("\"ddr_metrics\""));
 }
 
 #[test]
@@ -186,6 +194,10 @@ fn test_pipeline_step_json_schema_and_determinism() {
     assert!(first.contains("\"tool\""));
     assert!(first.contains("\"artifacts\""));
     assert!(first.contains("\"cell_metrics\""));
+    assert!(first.contains("\"rss\""));
+    assert!(first.contains("\"drbi\""));
+    assert!(first.contains("\"cci\""));
+    assert!(first.contains("\"trci\""));
     assert!(first.contains("\"key_metrics\""));
     assert!(first.contains("\"mode\":\"pipeline\""));
 

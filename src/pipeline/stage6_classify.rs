@@ -20,6 +20,10 @@ pub struct Stage6Inputs<'a> {
     pub iaa: &'a [f32],
     pub dfa: &'a [f32],
     pub cea: &'a [f32],
+    pub rss: &'a [f32],
+    pub drbi: &'a [f32],
+    pub cci: &'a [f32],
+    pub trci: &'a [f32],
     pub scores: &'a CompositeScores,
     pub drivers: &'a [AxisDrivers],
     pub thresholds: &'a ThresholdProfile,
@@ -121,6 +125,10 @@ fn collect_flags(inputs: &Stage6Inputs<'_>, cell: usize) -> Vec<Flag> {
     let _tbi = inputs.tbi[cell];
     let pds = inputs.pds[cell];
     let nsai = inputs.nsai[cell];
+    let rss = inputs.rss[cell];
+    let drbi = inputs.drbi[cell];
+    let cci = inputs.cci[cell];
+    let trci = inputs.trci[cell];
     let confidence = inputs.scores.confidence[cell];
     let axis_var = inputs.drivers[cell].axis_variance;
 
@@ -152,6 +160,22 @@ fn collect_flags(inputs: &Stage6Inputs<'_>, cell: usize) -> Vec<Flag> {
         && (inputs.scoring_mode == NuclearScoringMode::StrictBulk || axis_var < 0.01)
     {
         flags.push(Flag::LowConfidence);
+    }
+
+    if rss > 0.70 {
+        flags.push(Flag::HighReplicationStress);
+    }
+    if drbi > 0.75 {
+        flags.push(Flag::HrDominantRepair);
+    }
+    if drbi < 0.25 {
+        flags.push(Flag::NhejDominantRepair);
+    }
+    if cci > 0.75 {
+        flags.push(Flag::ChromatinHypercompact);
+    }
+    if trci > 0.70 {
+        flags.push(Flag::HighTrConflict);
     }
 
     let model_limitation = inputs.thresholds.activation_mode != AxisActivationMode::Absolute

@@ -8,6 +8,10 @@ pub struct Axes {
     pub iaa: Vec<f32>,
     pub dfa: Vec<f32>,
     pub cea: Vec<f32>,
+    pub rss: Vec<f32>,
+    pub drbi: Vec<f32>,
+    pub cci: Vec<f32>,
+    pub trci: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Default)]

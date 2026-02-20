@@ -21,6 +21,7 @@ pub struct Stage5Inputs<'a> {
     pub panel_nonzero_fraction: Option<&'a [f32]>,
     pub axis_p90: Option<[f32; 3]>,
     pub scoring_mode: NuclearScoringMode,
+    pub include_ddr: bool,
 }
 
 pub fn run_stage5(inputs: &Stage5Inputs<'_>) -> Stage5Output {
@@ -47,15 +48,20 @@ pub fn run_stage5(inputs: &Stage5Inputs<'_>) -> Stage5Output {
         let nsai = inputs.axes.nsai[cell];
 
         let nps = clip01(0.45 * tbi + 0.35 * rci - 0.20 * pds - 0.20 * trs);
-        let ci = clip01(0.55 * trs + 0.45 * pds - 0.15 * tbi);
+        let mut ci = clip01(0.55 * trs + 0.45 * pds - 0.15 * tbi);
         let (confidence, breakdown) = match inputs.scoring_mode {
             NuclearScoringMode::StrictBulk => compute_confidence_legacy(inputs, cell),
             NuclearScoringMode::ImmuneAware => compute_confidence(inputs, cell),
         };
-        let rls = match inputs.scoring_mode {
+        let mut rls = match inputs.scoring_mode {
             NuclearScoringMode::StrictBulk => compute_rls_legacy(inputs, cell, confidence),
             NuclearScoringMode::ImmuneAware => compute_rls(inputs, cell, confidence),
         };
+
+        if inputs.include_ddr {
+            rls = clip01(rls - 0.25 * inputs.axes.rss[cell] - 0.20 * inputs.axes.trci[cell]);
+            ci = clip01(ci + 0.15 * inputs.axes.cci[cell]);
+        }
 
         scores.nps[cell] = nps;
         scores.ci[cell] = ci;
@@ -70,18 +76,27 @@ pub fn run_stage5(inputs: &Stage5Inputs<'_>) -> Stage5Output {
             ("high_trs", -0.20 * trs),
         ]);
 
-        drivers_out.ci[cell] = top_k_drivers(vec![
+        let mut ci_drivers = vec![
             ("high_trs", 0.55 * trs),
             ("high_pds", 0.45 * pds),
             ("high_tbi", -0.15 * tbi),
-        ]);
+        ];
+        if inputs.include_ddr {
+            ci_drivers.push(("high_cci", 0.15 * inputs.axes.cci[cell]));
+        }
+        drivers_out.ci[cell] = top_k_drivers(ci_drivers);
 
-        drivers_out.rls[cell] = top_k_drivers(vec![
+        let mut rls_drivers = vec![
             ("high_tbi", 0.45 * tbi),
             ("high_rci", 0.35 * rci),
             ("high_pds", -0.25 * pds),
             ("high_nsai", -0.15 * nsai),
-        ]);
+        ];
+        if inputs.include_ddr {
+            rls_drivers.push(("high_rss", -0.25 * inputs.axes.rss[cell]));
+            rls_drivers.push(("high_trci", -0.20 * inputs.axes.trci[cell]));
+        }
+        drivers_out.rls[cell] = top_k_drivers(rls_drivers);
     }
 
     Stage5Output {
