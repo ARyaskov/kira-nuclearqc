@@ -5,6 +5,10 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+use crate::metrics::genome_stability::aggregate::summarize_genome_stability;
+use crate::metrics::genome_stability::scores::{
+    GenomePanelAudit, GenomeStabilityCellScores, RobustNormStat,
+};
 use crate::model::drivers::ScoreDrivers;
 use crate::model::flags::{Flag, flag_order};
 use crate::model::regimes::NuclearRegime;
@@ -43,6 +47,7 @@ pub struct Stage7Input<'a> {
     pub sample: Option<&'a [String]>,
     pub condition: Option<&'a [String]>,
     pub species_per_cell: Option<&'a [String]>,
+    pub cluster_labels: Option<&'a [String]>,
     pub species_global: String,
 
     pub libsize: &'a [f32],
@@ -61,6 +66,10 @@ pub struct Stage7Input<'a> {
     pub ddr_drbi: &'a [f32],
     pub ddr_cci: &'a [f32],
     pub ddr_trci: &'a [f32],
+    pub genome_stability: &'a GenomeStabilityCellScores,
+    pub genome_stability_norm: &'a [RobustNormStat],
+    pub genome_stability_panel_version: &'static str,
+    pub genome_stability_panel_audits: &'a [GenomePanelAudit],
 
     pub scores: &'a CompositeScores,
     pub drivers: &'a ScoreDrivers,
@@ -160,6 +169,21 @@ fn write_cell_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()> {
         "drbi",
         "cci",
         "trci",
+        "replication_core",
+        "ddr_core",
+        "hr_core",
+        "nhej_core",
+        "sphase_core",
+        "senescence_core",
+        "RSS",
+        "DDR",
+        "RB",
+        "CDS",
+        "SAS",
+        "replication_stress_high",
+        "checkpoint_addicted",
+        "senescent_like",
+        "genomic_instability_risk",
     ]
     .join("\t");
     writeln!(w, "{}", header)?;
@@ -233,6 +257,21 @@ fn write_cell_tsv(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<()> {
             format_f32_6(input.ddr_drbi[cell]),
             format_f32_6(input.ddr_cci[cell]),
             format_f32_6(input.ddr_trci[cell]),
+            format_f32_6(input.genome_stability.replication_core[cell]),
+            format_f32_6(input.genome_stability.ddr_core[cell]),
+            format_f32_6(input.genome_stability.hr_core[cell]),
+            format_f32_6(input.genome_stability.nhej_core[cell]),
+            format_f32_6(input.genome_stability.sphase_core[cell]),
+            format_f32_6(input.genome_stability.senescence_core[cell]),
+            format_f32_6(input.genome_stability.rss[cell]),
+            format_f32_6(input.genome_stability.ddr[cell]),
+            format_f32_6(input.genome_stability.rb[cell]),
+            format_f32_6(input.genome_stability.cds[cell]),
+            format_f32_6(input.genome_stability.sas[cell]),
+            input.genome_stability.replication_stress_high[cell].to_string(),
+            input.genome_stability.checkpoint_addicted[cell].to_string(),
+            input.genome_stability.senescent_like[cell].to_string(),
+            input.genome_stability.genomic_instability_risk[cell].to_string(),
         ]
         .join("\t");
         writeln!(w, "{}", row)?;
@@ -487,6 +526,13 @@ fn build_summary(input: &Stage7Input<'_>, mode: ReportMode) -> SummaryData {
         .map(|a| (a.panel_id.clone(), a.missing_genes.clone()))
         .collect::<Vec<_>>();
     let rls_contributors_top = top_rls_contributors(input);
+    let genome_stability = summarize_genome_stability(
+        input.genome_stability_panel_version,
+        input.genome_stability_panel_audits,
+        input.genome_stability,
+        input.genome_stability_norm,
+        input.cluster_labels,
+    );
 
     SummaryData {
         tool_name: input.tool_name.clone(),
@@ -538,6 +584,7 @@ fn build_summary(input: &Stage7Input<'_>, mode: ReportMode) -> SummaryData {
 
         missing_genes_by_panel,
         rls_contributors_top,
+        genome_stability,
     }
 }
 

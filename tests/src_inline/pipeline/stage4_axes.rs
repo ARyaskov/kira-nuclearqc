@@ -1,4 +1,5 @@
 use super::*;
+use crate::input::{GeneIndex, Species};
 use crate::panels::defs::{PanelDef, PanelGroup};
 use crate::panels::{Panel, PanelScores, PanelSet};
 
@@ -77,6 +78,13 @@ fn simple_panel_set() -> PanelSet {
     PanelSet { panels }
 }
 
+fn simple_gene_index() -> GeneIndex {
+    GeneIndex {
+        gene_id_by_feature: vec![Some(0), Some(1), Some(2)],
+        symbols_by_gene_id: vec!["ATR".to_string(), "CHEK1".to_string(), "TP53".to_string()],
+    }
+}
+
 fn simple_scores() -> PanelScores {
     PanelScores {
         panel_sum: vec![
@@ -113,7 +121,14 @@ fn test_tbi_extremes() {
     thresholds.frac_rescale_min = 0.0;
     thresholds.frac_rescale_max = 1.0;
 
-    let out = run_stage4(&accessor, &panel_set, &panel_scores, &thresholds);
+    let out = run_stage4(
+        &accessor,
+        &simple_gene_index(),
+        Species::Human,
+        &panel_set,
+        &panel_scores,
+        &thresholds,
+    );
     assert!(out.axes.tbi[0] >= 0.0 && out.axes.tbi[0] <= 1.0);
 }
 
@@ -128,7 +143,14 @@ fn test_pds_dominance() {
         nnz: vec![3],
     };
     let thresholds = ThresholdProfile::default_v1();
-    let out = run_stage4(&accessor, &panel_set, &panel_scores, &thresholds);
+    let out = run_stage4(
+        &accessor,
+        &simple_gene_index(),
+        Species::Human,
+        &panel_set,
+        &panel_scores,
+        &thresholds,
+    );
     assert!(out.axes.pds[0] > 0.0);
 }
 
@@ -146,7 +168,14 @@ fn test_rci_guard() {
     };
     let mut thresholds = ThresholdProfile::default_v1();
     thresholds.tf_min_sum = 5.0;
-    let out = run_stage4(&accessor, &panel_set, &panel_scores, &thresholds);
+    let out = run_stage4(
+        &accessor,
+        &simple_gene_index(),
+        Species::Human,
+        &panel_set,
+        &panel_scores,
+        &thresholds,
+    );
     assert_eq!(out.axes.rci[0], 0.0);
     assert!(out.flags[0].low_tf_signal);
 }
@@ -162,8 +191,22 @@ fn test_determinism() {
         nnz: vec![3],
     };
     let thresholds = ThresholdProfile::default_v1();
-    let a = run_stage4(&accessor, &panel_set, &panel_scores, &thresholds);
-    let b = run_stage4(&accessor, &panel_set, &panel_scores, &thresholds);
+    let a = run_stage4(
+        &accessor,
+        &simple_gene_index(),
+        Species::Human,
+        &panel_set,
+        &panel_scores,
+        &thresholds,
+    );
+    let b = run_stage4(
+        &accessor,
+        &simple_gene_index(),
+        Species::Human,
+        &panel_set,
+        &panel_scores,
+        &thresholds,
+    );
 
     assert_eq!(a.axes.tbi[0].to_bits(), b.axes.tbi[0].to_bits());
     assert_eq!(a.axes.rci[0].to_bits(), b.axes.rci[0].to_bits());

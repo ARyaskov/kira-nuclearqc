@@ -26,6 +26,11 @@ This document summarizes the deterministic pipeline stages implemented in `kira-
 ## Stage 4: Axes
 - TBI, RCI, PDS, TRS, NSAI
 - Deterministic entropy and ratio calculations
+- Nuclear Genome Stability per-cell metrics:
+  - core panel trimmed means: `replication_core`, `ddr_core`, `hr_core`, `nhej_core`, `sphase_core`, `senescence_core`
+  - robust within-sample z-scores (median/MAD)
+  - derived scores: `RSS`, `DDR`, `RB`, `CDS`, `SAS`
+  - flags: `replication_stress_high`, `checkpoint_addicted`, `senescent_like`, `genomic_instability_risk`
 
 ## Stage 5: Composite Scores
 - NPS, CI, RLS
@@ -40,6 +45,7 @@ This document summarizes the deterministic pipeline stages implemented in `kira-
 - Standalone mode outputs:
   - `nuclearqc.tsv` (cell or sample mode)
   - `summary.json`
+    - additive `genome_stability` block with panel version, thresholds, global and cluster summaries
   - `report.txt`
   - `panels_report.tsv`
 - Pipeline mode outputs in `<out>/kira-nuclearqc/`:

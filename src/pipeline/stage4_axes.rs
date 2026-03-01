@@ -1,3 +1,7 @@
+use crate::input::{GeneIndex, Species};
+use crate::metrics::genome_stability::scores::{
+    GenomePanelAudit, GenomeStabilityCellScores, RobustNormStat, compute_genome_stability,
+};
 use crate::model::axes::{Axes, AxisDrivers, AxisFlags, clip01};
 use crate::model::ddr::{DdrMetrics, compute_ddr_metrics};
 use crate::model::thresholds::{AxisActivationMode, ThresholdProfile};
@@ -12,10 +16,16 @@ pub struct Stage4Output {
     pub drivers: Vec<AxisDrivers>,
     pub flags: Vec<AxisFlags>,
     pub ddr: DdrMetrics,
+    pub genome_stability: GenomeStabilityCellScores,
+    pub genome_stability_norm: Vec<RobustNormStat>,
+    pub genome_stability_panel_version: &'static str,
+    pub genome_stability_panel_audits: Vec<GenomePanelAudit>,
 }
 
 pub fn run_stage4(
     accessor: &dyn ExprAccessor,
+    gene_index: &GeneIndex,
+    species: Species,
     panel_set: &PanelSet,
     panel_scores: &PanelScores,
     thresholds: &ThresholdProfile,
@@ -238,6 +248,7 @@ pub fn run_stage4(
         &chromatin_open_norm,
         &axes.tbi,
     );
+    let genome_stability = compute_genome_stability(accessor, gene_index, species);
 
     for cell in 0..n_cells {
         axes.rss[cell] = ddr.rss[cell];
@@ -267,6 +278,10 @@ pub fn run_stage4(
         drivers,
         flags,
         ddr,
+        genome_stability: genome_stability.cells,
+        genome_stability_norm: genome_stability.norm_stats,
+        genome_stability_panel_version: genome_stability.panel_version,
+        genome_stability_panel_audits: genome_stability.panel_audits,
     }
 }
 

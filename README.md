@@ -5,6 +5,7 @@ Deterministic CLI for nuclear state and transcriptional plasticity analysis from
 ## Status
 - Stages 1–7 implemented with deterministic outputs
 - SIMD backend selection at compile time (AVX2 / NEON / scalar)
+- Includes Nuclear Genome Stability metrics (replication stress, DDR, repair balance, checkpoint dependency, senescence proxies)
 
 ## Build
 ```bash
@@ -26,6 +27,13 @@ kira-nuclearqc run --input <dir> --out <outdir> [--mode cell|sample] [--run-mode
 - `summary.json`
 - `report.txt`
 - `panels_report.tsv`
+
+`nuclearqc.tsv` now includes additive per-cell genome-stability columns:
+- cores: `replication_core`, `ddr_core`, `hr_core`, `nhej_core`, `sphase_core`, `senescence_core`
+- derived: `RSS`, `DDR`, `RB`, `CDS`, `SAS`
+- flags: `replication_stress_high`, `checkpoint_addicted`, `senescent_like`, `genomic_instability_risk`
+
+`summary.json` includes additive `genome_stability` global/cluster summaries with panel coverage audits and deterministic thresholds.
 
 ### Run Modes
 - `standalone` (default): reads standard 10x inputs and writes outputs directly into `--out`.

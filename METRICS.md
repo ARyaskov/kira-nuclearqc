@@ -169,6 +169,94 @@ DDR uses normalized relative inputs from:
 Additional derived diagnostic:
 - `axis_variance` = population variance of 12 axes (`tbi,rci,pds,trs,nsai,iaa,dfa,cea,rss,drbi,cci,trci`)
 
+## Nuclear Genome Stability (single-sample transcriptional proxies)
+
+Panel version:
+- `GENOME_STABILITY_PANEL_V1`
+
+Scientific intent:
+- Replication stress: DNA synthesis under pressure; ATR/CHK1 and replication-machinery genes rise.
+- DDR activation: p53/p21/GADD45 axis activation under genotoxic stress.
+- Repair balance: HR-versus-NHEJ pathway engagement proxy from transcriptional state.
+- Checkpoint dependency: high stress/DDR without full arrest suggests ATR/CHK1 reliance.
+- Senescence/arrest: p16/p21 and senescence-associated secretory proxies with reduced proliferation.
+
+Important interpretation limits:
+- These metrics are transcriptional proxies, not direct measurements of DNA breaks or replication-fork collapse.
+- They are computed within one sample and do not require time-series or matched controls.
+
+### Curated panel definitions
+
+- Replication stress / fork protection:
+  - `ATR, CHEK1, CHEK2, TOPBP1, CLSPN, TIMELESS, TIPIN, RAD17, HUS1, RAD9A, RAD1, RPA1, RPA2, RPA3, MCM2-7, CDC45, GINS1-4, PCNA`
+- DDR / p53 axis:
+  - `TP53, CDKN1A, GADD45A, MDM2, BAX, BBC3`
+- HR proxy:
+  - `BRCA1, BRCA2, RAD51, PALB2, BRIP1, BARD1, RAD50, MRE11, NBN`
+- NHEJ proxy:
+  - `XRCC5, XRCC6, PRKDC, LIG4, XRCC4, DCLRE1C`
+- Replication licensing / S-phase proxy:
+  - `MKI67, TOP2A, CCNB1, CCNB2, CDC20, CDK1, PCNA, TYMS, RRM2`
+- Senescence / arrest:
+  - `CDKN2A, CDKN1A, GLB1, SERPINE1, IGFBP7`
+
+### Per-cell core panel scoring
+
+For each panel `P` and cell `c`:
+- collect normalized expression values for mapped panel genes present in that cell sparse vector
+- if present gene count `< 3` => panel score is `NaN`
+- else trimmed mean with 10% trim:
+  - `k = floor(0.1 * n)`
+  - `TM(P, c) = mean(v_sorted[k : n-k])`
+
+Core scores:
+- `replication_core = TM(ReplicationStressPanel, c)`
+- `ddr_core = TM(DDRPanel, c)`
+- `hr_core = TM(HRPanel, c)`
+- `nhej_core = TM(NHEJPanel, c)`
+- `sphase_core = TM(SPhasePanel, c)`
+- `senescence_core = TM(SenescencePanel, c)`
+
+### Robust within-sample normalization
+
+For each core vector across cells:
+- median `m`
+- MAD `d = median(|x - m|)`
+- robust z:
+  - `Z = (x - m) / (1.4826*d + 1e-9)`
+- if `d == 0`, finite entries are set to `0`
+- `NaN` inputs stay `NaN`
+
+### Derived scores
+
+- `RSS = 0.45*Z(replication_core) + 0.25*Z(sphase_core) + 0.30*Z(ddr_core)`
+- `DDR = Z(ddr_core)`
+- `RB = Z(hr_core) - Z(nhej_core)`
+- `CDS = 0.6*Z(replication_core) + 0.4*Z(ddr_core) - 0.2*max(0, Z(senescence_core))`
+- `SAS = 0.7*Z(senescence_core) + 0.3*Z(ddr_core)`
+
+### Deterministic per-cell flags
+
+- `replication_stress_high`: `RSS >= 2.0`
+- `ddr_high`: `DDR >= 2.0`
+- `checkpoint_addicted`: `CDS >= 2.0` and `SAS < 1.5`
+- `senescent_like`: `SAS >= 2.0` and `Z(sphase_core) <= -0.5`
+- `genomic_instability_risk`: (`RSS >= 2.0` and `DDR >= 2.0`) OR (`CDS >= 2.0` and `RB <= -1.0`)
+
+If required inputs are `NaN`, all flags for that score path evaluate to `false`.
+
+### Aggregate summaries
+
+- Global:
+  - robust normalization medians/MADs for each core
+  - distributions (`median`, `p10`, `p90`) for `RSS`, `DDR`, `RB`, `CDS`, `SAS`
+  - global flag fractions and missingness fractions
+- Cluster-level (if metadata provides a cluster column):
+  - per-cluster `median`, `p10`, `p90` for `RSS`, `DDR`, `RB`, `CDS`, `SAS`
+  - per-cluster flag fractions
+  - deterministic lexical cluster ordering
+  - top clusters by `median(RSS)` and by `fraction(checkpoint_addicted)`
+
 ## Stage-5 Composite Scores
 
 ### `c1_nps`

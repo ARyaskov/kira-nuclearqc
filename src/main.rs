@@ -1,4 +1,5 @@
 mod input;
+mod metrics;
 mod model;
 mod panels;
 mod pipeline;
@@ -127,6 +128,8 @@ fn run() -> Result<(), String> {
     };
     let stage4 = run_stage4(
         accessor.as_ref(),
+        &bundle.gene_index,
+        bundle.species,
         &stage3.panels,
         &stage3.scores,
         &thresholds,
@@ -183,7 +186,7 @@ fn run() -> Result<(), String> {
         program_sum: Some(&program_sum),
     });
 
-    let (sample, condition, species_per_cell) = extract_meta(&bundle);
+    let (sample, condition, species_per_cell, cluster_labels) = extract_meta(&bundle);
 
     let mut libsize_vec = Vec::with_capacity(bundle.n_cells);
     let mut nnz_vec = Vec::with_capacity(bundle.n_cells);
@@ -202,6 +205,7 @@ fn run() -> Result<(), String> {
         sample: sample.as_deref(),
         condition: condition.as_deref(),
         species_per_cell: species_per_cell.as_deref(),
+        cluster_labels: cluster_labels.as_deref(),
         species_global: format!("{:?}", bundle.species),
 
         libsize: &libsize_vec,
@@ -220,6 +224,10 @@ fn run() -> Result<(), String> {
         ddr_drbi: &stage4.axes.drbi,
         ddr_cci: &stage4.axes.cci,
         ddr_trci: &stage4.axes.trci,
+        genome_stability: &stage4.genome_stability,
+        genome_stability_norm: &stage4.genome_stability_norm,
+        genome_stability_panel_version: stage4.genome_stability_panel_version,
+        genome_stability_panel_audits: &stage4.genome_stability_panel_audits,
 
         scores: &stage5.scores,
         drivers: &stage5.drivers,
@@ -392,14 +400,17 @@ fn extract_meta(
     Option<Vec<String>>,
     Option<Vec<String>>,
     Option<Vec<String>>,
+    Option<Vec<String>>,
 ) {
     let mut sample: Option<Vec<String>> = None;
     let mut condition: Option<Vec<String>> = None;
     let mut species: Option<Vec<String>> = None;
+    let mut cluster: Option<Vec<String>> = None;
     if let Some(meta) = &bundle.meta {
         let mut sample_idx = None;
         let mut condition_idx = None;
         let mut species_idx = None;
+        let mut cluster_idx = None;
         for (i, name) in meta.columns.iter().enumerate() {
             let lower = name.to_ascii_lowercase();
             if lower == "sample" {
@@ -408,6 +419,13 @@ fn extract_meta(
                 condition_idx = Some(i);
             } else if lower == "species" {
                 species_idx = Some(i);
+            } else if lower == "cluster"
+                || lower == "clusters"
+                || lower == "seurat_clusters"
+                || lower == "leiden"
+                || lower == "louvain"
+            {
+                cluster_idx = Some(i);
             }
         }
         if let Some(idx) = sample_idx {
@@ -434,8 +452,16 @@ fn extract_meta(
                     .collect(),
             );
         }
+        if let Some(idx) = cluster_idx {
+            cluster = Some(
+                meta.rows
+                    .iter()
+                    .map(|r| r.get(idx).cloned().unwrap_or_default())
+                    .collect(),
+            );
+        }
     }
-    (sample, condition, species)
+    (sample, condition, species, cluster)
 }
 
 fn compute_key_panel_coverage(

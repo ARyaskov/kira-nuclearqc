@@ -1,3 +1,5 @@
+use crate::metrics::genome_stability::aggregate::GenomeStabilitySummary;
+
 pub mod json;
 pub mod text;
 
@@ -54,6 +56,7 @@ pub struct SummaryData {
 
     pub missing_genes_by_panel: Vec<(String, Vec<String>)>,
     pub rls_contributors_top: Vec<String>,
+    pub genome_stability: GenomeStabilitySummary,
 }
 
 #[derive(Debug, Clone)]

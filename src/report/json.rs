@@ -212,6 +212,172 @@ pub fn render_summary_json(data: &SummaryData) -> String {
         push_str_val(&mut out, name);
     }
     out.push_str("]}");
+    out.push(',');
+    out.push_str("\"genome_stability\":{");
+    push_kv_str(
+        &mut out,
+        "panel_version",
+        data.genome_stability.panel_version,
+    );
+    out.push(',');
+    out.push_str("\"thresholds\":{");
+    push_kv_num(
+        &mut out,
+        "replication_stress_high_rss",
+        data.genome_stability.thresholds.replication_stress_high_rss as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "ddr_high",
+        data.genome_stability.thresholds.ddr_high as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "checkpoint_addicted_cds",
+        data.genome_stability.thresholds.checkpoint_addicted_cds as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "checkpoint_addicted_sas_max",
+        data.genome_stability.thresholds.checkpoint_addicted_sas_max as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "senescent_like_sas",
+        data.genome_stability.thresholds.senescent_like_sas as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "senescent_like_sphase_z_max",
+        data.genome_stability.thresholds.senescent_like_sphase_z_max as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "gir_rb_nhej_skew_max",
+        data.genome_stability.thresholds.gir_rb_nhej_skew_max as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "panel_min_genes",
+        data.genome_stability.thresholds.panel_min_genes as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "trimmed_mean_fraction",
+        data.genome_stability.thresholds.trimmed_mean_fraction as f64,
+    );
+    out.push(',');
+    push_kv_num(
+        &mut out,
+        "robust_z_eps",
+        data.genome_stability.thresholds.robust_z_eps as f64,
+    );
+    out.push_str("},");
+    out.push_str("\"panel_audits\":[");
+    for (idx, audit) in data.genome_stability.panel_audits.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(&mut out, "panel_id", &audit.panel_id);
+        out.push(',');
+        push_kv_num(
+            &mut out,
+            "panel_size_defined",
+            audit.panel_size_defined as f64,
+        );
+        out.push(',');
+        push_kv_num(
+            &mut out,
+            "panel_size_mappable",
+            audit.panel_size_mappable as f64,
+        );
+        out.push(',');
+        out.push_str("\"missing_genes\":[");
+        for (gene_idx, gene) in audit.missing_genes.iter().enumerate() {
+            if gene_idx > 0 {
+                out.push(',');
+            }
+            push_str_val(&mut out, gene);
+        }
+        out.push(']');
+        out.push('}');
+    }
+    out.push_str("],");
+    out.push_str("\"global_stats\":{");
+    out.push_str("\"robust_norm\":[");
+    for (idx, stat) in data
+        .genome_stability
+        .global_stats
+        .robust_norm
+        .iter()
+        .enumerate()
+    {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(&mut out, "name", stat.name);
+        out.push(',');
+        push_kv_num(&mut out, "median", stat.median as f64);
+        out.push(',');
+        push_kv_num(&mut out, "mad", stat.mad as f64);
+        out.push('}');
+    }
+    out.push_str("],");
+    out.push_str("\"distributions\":");
+    push_genome_metric_distributions(&mut out, &data.genome_stability.global_stats.distributions);
+    out.push(',');
+    out.push_str("\"flag_fractions\":");
+    push_genome_flag_fractions(&mut out, &data.genome_stability.global_stats.flag_fractions);
+    out.push(',');
+    out.push_str("\"missing_fraction\":");
+    push_genome_flag_fractions(
+        &mut out,
+        &data.genome_stability.global_stats.missing_fraction,
+    );
+    out.push(',');
+    out.push_str("\"top_clusters_by_rss\":");
+    push_top_clusters(
+        &mut out,
+        &data.genome_stability.global_stats.top_clusters_by_rss,
+    );
+    out.push(',');
+    out.push_str("\"top_clusters_by_checkpoint_addicted\":");
+    push_top_clusters(
+        &mut out,
+        &data
+            .genome_stability
+            .global_stats
+            .top_clusters_by_checkpoint_addicted,
+    );
+    out.push_str("},");
+    out.push_str("\"cluster_stats\":[");
+    for (idx, cluster) in data.genome_stability.cluster_stats.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(&mut out, "cluster_id", &cluster.cluster_id);
+        out.push(',');
+        push_kv_num(&mut out, "n_cells", cluster.n_cells as f64);
+        out.push(',');
+        out.push_str("\"metrics\":");
+        push_genome_metric_distributions(&mut out, &cluster.metrics);
+        out.push(',');
+        out.push_str("\"flag_fractions\":");
+        push_genome_flag_fractions(&mut out, &cluster.flag_fractions);
+        out.push('}');
+    }
+    out.push_str("]}");
 
     out.push('}');
     out
@@ -299,4 +465,62 @@ fn escape_json(s: &str) -> String {
         }
     }
     out
+}
+
+fn push_genome_metric_distributions(
+    out: &mut String,
+    values: &[crate::metrics::genome_stability::aggregate::GenomeMetricDistribution],
+) {
+    out.push('[');
+    for (idx, metric) in values.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(out, "name", metric.name);
+        out.push(',');
+        push_kv_num(out, "median", metric.median as f64);
+        out.push(',');
+        push_kv_num(out, "p10", metric.p10 as f64);
+        out.push(',');
+        push_kv_num(out, "p90", metric.p90 as f64);
+        out.push('}');
+    }
+    out.push(']');
+}
+
+fn push_genome_flag_fractions(
+    out: &mut String,
+    values: &[crate::metrics::genome_stability::aggregate::GenomeFlagFraction],
+) {
+    out.push('[');
+    for (idx, flag) in values.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(out, "name", flag.name);
+        out.push(',');
+        push_kv_num(out, "fraction", flag.fraction as f64);
+        out.push('}');
+    }
+    out.push(']');
+}
+
+fn push_top_clusters(
+    out: &mut String,
+    values: &[crate::metrics::genome_stability::aggregate::TopClusterStat],
+) {
+    out.push('[');
+    for (idx, cluster) in values.iter().enumerate() {
+        if idx > 0 {
+            out.push(',');
+        }
+        out.push('{');
+        push_kv_str(out, "cluster_id", &cluster.cluster_id);
+        out.push(',');
+        push_kv_num(out, "value", cluster.value as f64);
+        out.push('}');
+    }
+    out.push(']');
 }

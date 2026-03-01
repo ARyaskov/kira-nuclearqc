@@ -1,4 +1,7 @@
 use super::*;
+use crate::metrics::genome_stability::scores::{
+    GenomePanelAudit, GenomeStabilityCellScores, RobustNormStat,
+};
 use crate::model::drivers::ScoreDrivers;
 use crate::model::flags::Flag;
 use crate::model::regimes::NuclearRegime;
@@ -38,6 +41,42 @@ fn build_input() -> Stage7Input<'static> {
     let ddr_drbi = vec![0.4, 0.5];
     let ddr_cci = vec![0.1, 0.2];
     let ddr_trci = vec![0.3, 0.4];
+    let genome_stability = GenomeStabilityCellScores {
+        replication_core: vec![0.1, 0.2],
+        ddr_core: vec![0.2, 0.3],
+        hr_core: vec![0.3, 0.4],
+        nhej_core: vec![0.2, 0.1],
+        sphase_core: vec![0.4, 0.5],
+        senescence_core: vec![0.1, 0.2],
+        rss: vec![0.5, 0.6],
+        ddr: vec![0.6, 0.7],
+        rb: vec![0.1, -0.1],
+        cds: vec![0.4, 0.5],
+        sas: vec![0.2, 0.3],
+        replication_stress_high: vec![false, true],
+        ddr_high: vec![false, false],
+        checkpoint_addicted: vec![false, true],
+        senescent_like: vec![false, false],
+        genomic_instability_risk: vec![false, true],
+    };
+    let genome_stability_norm = vec![
+        RobustNormStat {
+            name: "replication_core",
+            median: 0.15,
+            mad: 0.05,
+        },
+        RobustNormStat {
+            name: "ddr_core",
+            median: 0.25,
+            mad: 0.05,
+        },
+    ];
+    let genome_stability_panel_audits = vec![GenomePanelAudit {
+        panel_id: "replication_stress".to_string(),
+        panel_size_defined: 10,
+        panel_size_mappable: 8,
+        missing_genes: vec!["RAD9A".to_string()],
+    }];
 
     let scores = CompositeScores {
         nps: vec![0.1, 0.2],
@@ -98,6 +137,7 @@ fn build_input() -> Stage7Input<'static> {
         sample: Some(Box::leak(Box::new(sample))),
         condition: Some(Box::leak(Box::new(condition))),
         species_per_cell: Some(Box::leak(Box::new(species))),
+        cluster_labels: None,
         species_global: "Human".to_string(),
 
         libsize: Box::leak(Box::new(libsize)),
@@ -116,6 +156,10 @@ fn build_input() -> Stage7Input<'static> {
         ddr_drbi: Box::leak(Box::new(ddr_drbi)),
         ddr_cci: Box::leak(Box::new(ddr_cci)),
         ddr_trci: Box::leak(Box::new(ddr_trci)),
+        genome_stability: Box::leak(Box::new(genome_stability)),
+        genome_stability_norm: Box::leak(Box::new(genome_stability_norm)),
+        genome_stability_panel_version: "GENOME_STABILITY_PANEL_V1",
+        genome_stability_panel_audits: Box::leak(Box::new(genome_stability_panel_audits)),
 
         scores: Box::leak(Box::new(scores)),
         drivers: Box::leak(Box::new(drivers)),
@@ -165,6 +209,7 @@ fn test_json_schema() {
     assert!(text.contains("\"qc\""));
     assert!(text.contains("\"regimes\""));
     assert!(text.contains("\"ddr_metrics\""));
+    assert!(text.contains("\"genome_stability\""));
 }
 
 #[test]
