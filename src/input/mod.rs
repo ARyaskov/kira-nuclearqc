@@ -173,6 +173,7 @@ pub fn build_gene_index(features: &[Feature]) -> GeneIndex {
     let mut symbols_by_gene_id: Vec<String> = Vec::new();
     let mut symbol_to_gene_id: HashMap<String, usize> = HashMap::new();
     let mut gene_id_by_feature: Vec<Option<usize>> = Vec::with_capacity(features.len());
+    let mut duplicate_events: Vec<(usize, String)> = Vec::new();
 
     for (idx, feature) in features.iter().enumerate() {
         if feature.symbol_norm.is_empty() {
@@ -180,11 +181,8 @@ pub fn build_gene_index(features: &[Feature]) -> GeneIndex {
             continue;
         }
         if let Some(existing) = symbol_to_gene_id.get(feature.symbol_norm.as_str()) {
-            crate::warn!(
-                "duplicate gene symbol; mapping to existing gene id: feature_index={}, symbol={}",
-                idx,
-                feature.symbol_norm
-            );
+            let _ = existing;
+            duplicate_events.push((idx, feature.symbol_norm.clone()));
             gene_id_by_feature.push(Some(*existing));
             continue;
         }
@@ -192,6 +190,35 @@ pub fn build_gene_index(features: &[Feature]) -> GeneIndex {
         symbols_by_gene_id.push(feature.symbol_norm.clone());
         symbol_to_gene_id.insert(feature.symbol_norm.clone(), gene_id);
         gene_id_by_feature.push(Some(gene_id));
+    }
+
+    if !duplicate_events.is_empty() {
+        let mut unique_symbols: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for (_, symbol) in &duplicate_events {
+            unique_symbols.insert(symbol.clone());
+        }
+
+        let mut examples = String::new();
+        let limit = 8usize;
+        for (i, (feature_idx, symbol)) in duplicate_events.iter().take(limit).enumerate() {
+            if i > 0 {
+                examples.push_str(", ");
+            }
+            examples.push_str(symbol);
+            examples.push('@');
+            examples.push_str(&feature_idx.to_string());
+        }
+        if duplicate_events.len() > limit {
+            examples.push_str(", ...");
+        }
+
+        crate::warn!(
+            "duplicate gene symbols detected; mapping all duplicates to first occurrence: duplicates_total={}, symbols_unique={}, examples=[{}]",
+            duplicate_events.len(),
+            unique_symbols.len(),
+            examples
+        );
     }
 
     GeneIndex {
