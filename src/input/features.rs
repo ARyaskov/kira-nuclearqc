@@ -1,9 +1,8 @@
+use std::io::BufRead;
 use std::path::Path;
 
-use kira_scio::api::{Reader, ReaderOptions};
-use kira_scio::detect::DetectedFormat;
-
 use crate::input::InputError;
+use crate::input::cache::open_maybe_gz;
 
 #[derive(Debug, Clone)]
 pub struct Feature {
@@ -13,37 +12,51 @@ pub struct Feature {
     pub feature_type: Option<String>,
 }
 
+/// Parse a 10x features.tsv(.gz) or genes.tsv(.gz) file standalone.
+///
+/// Tab-separated, accepting `id`, `id<TAB>symbol`, or
+/// `id<TAB>symbol<TAB>feature_type[<TAB>...]`.
 pub fn parse_features(path: &Path) -> Result<Vec<Feature>, InputError> {
-    let md = Reader::with_options(
-        path,
-        ReaderOptions {
-            force_format: Some(DetectedFormat::Mtx10x),
-            strict: true,
-        },
-    )
-    .read_metadata()
-    .map_err(|e| InputError::Parse(e.message))?;
+    let mut reader = open_maybe_gz(path)?;
+    let mut out = Vec::new();
+    let mut buf = String::new();
+    loop {
+        buf.clear();
+        let n = reader.read_line(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        let line = buf.trim_end_matches(['\r', '\n']);
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split('\t');
+        let id = parts.next().unwrap_or("").trim().to_string();
+        let symbol = parts.next().unwrap_or("").trim().to_string();
+        let feature_type = parts.next().map(|s| s.trim().to_string());
 
-    if md.gene_symbols.is_empty() {
-        return Err(InputError::Parse("features file is empty".to_string()));
-    }
-
-    let mut features = Vec::with_capacity(md.gene_symbols.len());
-    for (idx, symbol) in md.gene_symbols.iter().enumerate() {
-        let id = md
-            .gene_ids
-            .get(idx)
-            .cloned()
-            .unwrap_or_else(|| idx.to_string());
-        features.push(Feature {
-            id,
-            symbol_raw: symbol.clone(),
-            symbol_norm: normalize_symbol(symbol),
-            feature_type: None,
+        // Single-column rows fall back to using id as the symbol.
+        let symbol_raw = if symbol.is_empty() {
+            id.clone()
+        } else {
+            symbol
+        };
+        let symbol_norm = normalize_symbol(&symbol_raw);
+        out.push(Feature {
+            id: if id.is_empty() {
+                out.len().to_string()
+            } else {
+                id
+            },
+            symbol_raw,
+            symbol_norm,
+            feature_type: feature_type.filter(|s| !s.is_empty()),
         });
     }
-
-    Ok(features)
+    if out.is_empty() {
+        return Err(InputError::Parse("features file is empty".to_string()));
+    }
+    Ok(out)
 }
 
 pub fn normalize_symbol(raw: &str) -> String {

@@ -85,15 +85,58 @@ pub fn format_f32_6(v: f32) -> String {
     format!("{:.6}", v)
 }
 
+/// Canonical quantile rule: input sorted ascending, index `ceil((n-1) * p)`,
+/// empty input returns 0.0. All median/percentile helpers route through this.
+/// Callers with possible NaN must filter first (sorting non-finite is UB).
+pub fn quantile_sorted(sorted: &[f32], p: f32) -> f32 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
+    let n = sorted.len();
+    let idx = (((n - 1) as f32) * p).ceil() as usize;
+    let idx = idx.min(n - 1);
+    sorted[idx]
+}
+
 pub fn quantile_indexed(values: &[f32], p: f32) -> f32 {
     if values.is_empty() {
         return 0.0;
     }
     let mut sorted = values.to_vec();
-    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let n = sorted.len();
-    let idx = ((n - 1) as f32 * p).ceil() as usize;
-    sorted[idx]
+    sort_floats(&mut sorted);
+    quantile_sorted(&sorted, p)
+}
+
+#[inline]
+pub fn sort_floats(values: &mut [f32]) {
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+}
+
+/// Sort once, then read out (median, p90, p99).
+pub fn triple_quantiles(values: &[f32]) -> (f32, f32, f32) {
+    if values.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
+    let mut sorted = values.to_vec();
+    sort_floats(&mut sorted);
+    (
+        quantile_sorted(&sorted, 0.5),
+        quantile_sorted(&sorted, 0.90),
+        quantile_sorted(&sorted, 0.99),
+    )
+}
+
+/// Sort once, read median and p10 (used by panels_report).
+pub fn median_p10(values: &[f32]) -> (f32, f32) {
+    if values.is_empty() {
+        return (0.0, 0.0);
+    }
+    let mut sorted = values.to_vec();
+    sort_floats(&mut sorted);
+    (
+        quantile_sorted(&sorted, 0.5),
+        quantile_sorted(&sorted, 0.10),
+    )
 }
 
 pub fn median(values: &[f32]) -> f32 {

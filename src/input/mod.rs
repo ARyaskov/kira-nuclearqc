@@ -25,6 +25,9 @@ pub enum Species {
 pub struct GeneIndex {
     pub gene_id_by_feature: Vec<Option<usize>>,
     pub symbols_by_gene_id: Vec<String>,
+    /// True if duplicate symbols were collapsed. When false, mapped gene_ids
+    /// are strictly increasing in feature order, so downstream skips dedup.
+    pub has_duplicates: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -224,6 +227,7 @@ pub fn build_gene_index(features: &[Feature]) -> GeneIndex {
     GeneIndex {
         gene_id_by_feature,
         symbols_by_gene_id,
+        has_duplicates: !duplicate_events.is_empty(),
     }
 }
 

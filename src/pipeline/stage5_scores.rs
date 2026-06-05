@@ -251,25 +251,18 @@ fn compute_rls_legacy(inputs: &Stage5Inputs<'_>, cell: usize, confidence: f32) -
     rls_base * confidence
 }
 
-fn top_k_drivers(items: Vec<(&'static str, f32)>) -> Vec<(String, f32)> {
-    let mut v: Vec<(String, f32)> = items
-        .into_iter()
-        .map(|(name, value)| (name.to_string(), value))
-        .collect();
-
-    v.sort_by(|a, b| {
+fn top_k_drivers(mut items: Vec<(&'static str, f32)>) -> Vec<(&'static str, f32)> {
+    // Sort by |value| descending, ties broken by name for determinism.
+    items.sort_by(|a, b| {
         let am = a.1.abs();
         let bm = b.1.abs();
         match bm.partial_cmp(&am).unwrap_or(std::cmp::Ordering::Equal) {
-            std::cmp::Ordering::Equal => a.0.cmp(&b.0),
+            std::cmp::Ordering::Equal => a.0.cmp(b.0),
             other => other,
         }
     });
-
-    if v.len() > 5 {
-        v.truncate(5);
-    }
-    v
+    items.truncate(5);
+    items
 }
 
 #[cfg(test)]

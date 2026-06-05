@@ -77,6 +77,7 @@ fn base_inputs() -> TestInputs {
         drivers: vec![AxisDrivers {
             expressed_genes: 50,
             gene_entropy: 0.2,
+            gene_entropy_norm: 0.2,
             panel_entropy: 0.2,
             max_program_share: 0.2,
             tf_entropy: 0.2,

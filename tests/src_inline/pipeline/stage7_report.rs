@@ -87,16 +87,16 @@ fn build_input() -> Stage7Input<'static> {
     };
     let drivers = ScoreDrivers {
         nps: vec![
-            vec![("high_tbi".to_string(), 0.1)],
-            vec![("high_tbi".to_string(), 0.2)],
+            vec![("high_tbi", 0.1f32)],
+            vec![("high_tbi", 0.2f32)],
         ],
         ci: vec![
-            vec![("high_trs".to_string(), 0.2)],
-            vec![("high_trs".to_string(), 0.3)],
+            vec![("high_trs", 0.2f32)],
+            vec![("high_trs", 0.3f32)],
         ],
         rls: vec![
-            vec![("high_rci".to_string(), 0.3)],
-            vec![("high_rci".to_string(), 0.4)],
+            vec![("high_rci", 0.3f32)],
+            vec![("high_rci", 0.4f32)],
         ],
     };
 

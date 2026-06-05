@@ -51,7 +51,9 @@ pub fn run_stage6(inputs: &Stage6Inputs<'_>) -> Vec<Classification> {
 
 fn classify_cell(inputs: &Stage6Inputs<'_>, cell: usize) -> NuclearRegime {
     let expressed_genes = inputs.drivers[cell].expressed_genes;
-    let gene_entropy = inputs.drivers[cell].gene_entropy;
+    // The METRICS.md 0.10 floor applies to normalized [0..1] entropy, not raw
+    // Shannon h (which grows unbounded with gene-set size).
+    let gene_entropy_norm = inputs.drivers[cell].gene_entropy_norm;
     let program_sum = inputs
         .program_sum
         .and_then(|v| v.get(cell).copied())
@@ -64,7 +66,9 @@ fn classify_cell(inputs: &Stage6Inputs<'_>, cell: usize) -> NuclearRegime {
     let nsai = inputs.nsai[cell];
 
     if expressed_genes < inputs.thresholds.min_expr_genes
-        || (tbi < 0.15 && gene_entropy < 0.10 && program_sum < inputs.thresholds.program_min_sum)
+        || (tbi < 0.15
+            && gene_entropy_norm < 0.10
+            && program_sum < inputs.thresholds.program_min_sum)
     {
         return NuclearRegime::TranscriptionallyCollapsed;
     }

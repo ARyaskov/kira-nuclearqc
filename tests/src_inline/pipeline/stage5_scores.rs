@@ -18,6 +18,7 @@ fn dummy_inputs() -> Stage5Inputs<'static> {
     let drivers = vec![AxisDrivers {
         expressed_genes: 50,
         gene_entropy: 0.0,
+        gene_entropy_norm: 0.0,
         panel_entropy: 0.0,
         max_program_share: 0.0,
         tf_entropy: 0.0,

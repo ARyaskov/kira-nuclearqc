@@ -82,6 +82,7 @@ fn simple_gene_index() -> GeneIndex {
     GeneIndex {
         gene_id_by_feature: vec![Some(0), Some(1), Some(2)],
         symbols_by_gene_id: vec!["ATR".to_string(), "CHEK1".to_string(), "TP53".to_string()],
+        has_duplicates: false,
     }
 }
 

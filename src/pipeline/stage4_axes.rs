@@ -221,6 +221,7 @@ pub fn run_stage4(
         drivers[cell] = AxisDrivers {
             expressed_genes,
             gene_entropy,
+            gene_entropy_norm,
             panel_entropy,
             max_program_share: max_share,
             tf_entropy,

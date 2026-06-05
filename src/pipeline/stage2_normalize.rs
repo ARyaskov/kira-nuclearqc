@@ -1,10 +1,11 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use crate::input::cache::{
     CacheMeta, CachedNormalizedData, cache_path_default, hash_bytes, hash_file,
     read_normalized_cache, write_normalized_cache,
 };
-use crate::input::mtx::{CscMatrix, read_mtx_csc};
+use crate::input::mtx::{CscMatrix, dedup_sort_merge, read_mtx_csc};
 use crate::input::organelle_bin::OrganelleBin;
 use crate::input::{GeneIndex, InputBundle, InputError, InputSourceKind};
 
@@ -40,7 +41,7 @@ pub trait ExprAccessor {
 }
 
 pub struct RawCountsAccessor {
-    cols: Vec<Vec<(u32, i64)>>,
+    cols: Vec<Vec<(u32, f32)>>,
     libsizes: Vec<f32>,
     nnz: Vec<u32>,
     n_genes: usize,
@@ -68,7 +69,7 @@ impl ExprAccessor for RawCountsAccessor {
                     (scaled.ln_1p()) as f32
                 }
             } else {
-                count as f32
+                count
             };
             f(gene_id, value);
         }
@@ -90,6 +91,8 @@ pub struct CachedNormalizedAccessor {
     n_genes: usize,
 }
 
+/// Lazy accessor over an OrganelleBin. On the duplicate-symbol path it dedups
+/// per-cell via `scratch` (RefCell; the pipeline is single-threaded).
 pub struct OrganelleCountsAccessor {
     bin: OrganelleBin,
     gene_index: GeneIndex,
@@ -98,6 +101,7 @@ pub struct OrganelleCountsAccessor {
     normalize: bool,
     scale: f32,
     n_genes: usize,
+    scratch: RefCell<Vec<(u32, f32)>>,
 }
 
 impl ExprAccessor for OrganelleCountsAccessor {
@@ -113,22 +117,48 @@ impl ExprAccessor for OrganelleCountsAccessor {
         let start = self.bin.csc.col_ptr[cell] as usize;
         let end = self.bin.csc.col_ptr[cell + 1] as usize;
         let lib = self.libsizes[cell] as f64;
+        let normalize = self.normalize;
+        let scale = self.scale as f64;
+
+        let emit_value = |count: f64| -> f32 {
+            if normalize {
+                if lib == 0.0 {
+                    0.0
+                } else {
+                    let scaled = count / lib * scale;
+                    scaled.ln_1p() as f32
+                }
+            } else {
+                count as f32
+            }
+        };
+
+        if !self.gene_index.has_duplicates {
+            // Streaming path: mapped gene_ids are already strictly increasing.
+            for idx in start..end {
+                let feature = self.bin.csc.row_idx[idx] as usize;
+                if let Some(gene_id) = self.gene_index.gene_id_by_feature[feature] {
+                    let count = self.bin.csc.values[idx] as f64;
+                    f(gene_id as u32, emit_value(count));
+                }
+            }
+            return;
+        }
+
+        // Dedup path: sum raw counts per gene_id before log-normalizing.
+        let mut scratch = self.scratch.borrow_mut();
+        scratch.clear();
+        scratch.reserve(end - start);
         for idx in start..end {
             let feature = self.bin.csc.row_idx[idx] as usize;
             if let Some(gene_id) = self.gene_index.gene_id_by_feature[feature] {
-                let count = self.bin.csc.values[idx] as f64;
-                let value = if self.normalize {
-                    if lib == 0.0 {
-                        0.0
-                    } else {
-                        let scaled = count / lib * (self.scale as f64);
-                        scaled.ln_1p() as f32
-                    }
-                } else {
-                    count as f32
-                };
-                f(gene_id as u32, value);
+                let count = self.bin.csc.values[idx] as f32;
+                scratch.push((gene_id as u32, count));
             }
+        }
+        dedup_sort_merge(&mut scratch);
+        for &(gene_id, count) in scratch.iter() {
+            f(gene_id, emit_value(count as f64));
         }
     }
 
@@ -231,6 +261,7 @@ pub fn build_expr_accessor(
             normalize,
             scale,
             n_genes,
+            scratch: RefCell::new(Vec::new()),
         };
         return Ok(Box::new(accessor));
     }
@@ -389,20 +420,41 @@ fn compute_stats_organelle(bin: &OrganelleBin, gene_index: &GeneIndex) -> (Vec<f
     let n_cells = bin.csc.n_cells;
     let mut libsizes = vec![0f32; n_cells];
     let mut nnz = vec![0u32; n_cells];
+
+    // Reusable scratch (only allocates on the dedup path).
+    let mut seen: Vec<u32> = Vec::new();
+
     for cell in 0..n_cells {
         let start = bin.csc.col_ptr[cell] as usize;
         let end = bin.csc.col_ptr[cell + 1] as usize;
         let mut sum = 0f64;
-        let mut count = 0u32;
-        for idx in start..end {
-            let feature = bin.csc.row_idx[idx] as usize;
-            if gene_index.gene_id_by_feature[feature].is_some() {
-                sum += bin.csc.values[idx] as f64;
-                count += 1;
+
+        if gene_index.has_duplicates {
+            seen.clear();
+            seen.reserve(end - start);
+            for idx in start..end {
+                let feature = bin.csc.row_idx[idx] as usize;
+                if let Some(gene_id) = gene_index.gene_id_by_feature[feature] {
+                    sum += bin.csc.values[idx] as f64;
+                    seen.push(gene_id as u32);
+                }
             }
+            // Count unique gene_ids via sort + dedup, no extra hashmap.
+            seen.sort_unstable();
+            seen.dedup();
+            nnz[cell] = seen.len() as u32;
+        } else {
+            let mut count = 0u32;
+            for idx in start..end {
+                let feature = bin.csc.row_idx[idx] as usize;
+                if gene_index.gene_id_by_feature[feature].is_some() {
+                    sum += bin.csc.values[idx] as f64;
+                    count += 1;
+                }
+            }
+            nnz[cell] = count;
         }
         libsizes[cell] = sum as f32;
-        nnz[cell] = count;
     }
     (libsizes, nnz)
 }
@@ -417,35 +469,72 @@ fn normalize_organelle(
     let mut nnz = vec![0u32; n_cells];
     let mut out_cols = Vec::with_capacity(n_cells);
 
+    // Scratch buffer for the dedup path; only allocated once.
+    let mut scratch: Vec<(u32, f32)> = Vec::new();
+
     for cell in 0..n_cells {
         let start = bin.csc.col_ptr[cell] as usize;
         let end = bin.csc.col_ptr[cell + 1] as usize;
         let mut sum = 0f64;
-        for idx in start..end {
-            let feature = bin.csc.row_idx[idx] as usize;
-            if gene_index.gene_id_by_feature[feature].is_some() {
-                sum += bin.csc.values[idx] as f64;
-            }
-        }
-        let lib = sum;
-        libsizes[cell] = lib as f32;
 
-        let mut out_col = Vec::new();
-        for idx in start..end {
-            let feature = bin.csc.row_idx[idx] as usize;
-            if let Some(gene_id) = gene_index.gene_id_by_feature[feature] {
-                let count = bin.csc.values[idx] as f64;
-                let val = if lib == 0.0 {
-                    0.0
-                } else {
-                    let scaled = count / lib * (scale as f64);
-                    scaled.ln_1p() as f32
-                };
-                out_col.push((gene_id as u32, val));
+        if gene_index.has_duplicates {
+            scratch.clear();
+            scratch.reserve(end - start);
+            for idx in start..end {
+                let feature = bin.csc.row_idx[idx] as usize;
+                if let Some(gene_id) = gene_index.gene_id_by_feature[feature] {
+                    let count = bin.csc.values[idx] as f32;
+                    scratch.push((gene_id as u32, count));
+                }
             }
+            dedup_sort_merge(&mut scratch);
+            for &(_, v) in scratch.iter() {
+                sum += v as f64;
+            }
+            let lib = sum;
+            libsizes[cell] = lib as f32;
+
+            let mut out_col = Vec::with_capacity(scratch.len());
+            if lib == 0.0 {
+                for &(gene, _) in scratch.iter() {
+                    out_col.push((gene, 0.0));
+                }
+            } else {
+                for &(gene, v) in scratch.iter() {
+                    let scaled = (v as f64) / lib * (scale as f64);
+                    out_col.push((gene, scaled.ln_1p() as f32));
+                }
+            }
+            nnz[cell] = out_col.len() as u32;
+            out_cols.push(out_col);
+        } else {
+            // Streaming path: no dedup; pre-compute libsize first.
+            for idx in start..end {
+                let feature = bin.csc.row_idx[idx] as usize;
+                if gene_index.gene_id_by_feature[feature].is_some() {
+                    sum += bin.csc.values[idx] as f64;
+                }
+            }
+            let lib = sum;
+            libsizes[cell] = lib as f32;
+
+            let mut out_col = Vec::with_capacity(end - start);
+            for idx in start..end {
+                let feature = bin.csc.row_idx[idx] as usize;
+                if let Some(gene_id) = gene_index.gene_id_by_feature[feature] {
+                    let count = bin.csc.values[idx] as f64;
+                    let val = if lib == 0.0 {
+                        0.0
+                    } else {
+                        let scaled = count / lib * (scale as f64);
+                        scaled.ln_1p() as f32
+                    };
+                    out_col.push((gene_id as u32, val));
+                }
+            }
+            nnz[cell] = out_col.len() as u32;
+            out_cols.push(out_col);
         }
-        nnz[cell] = out_col.len() as u32;
-        out_cols.push(out_col);
     }
 
     (libsizes, nnz, out_cols)

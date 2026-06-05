@@ -72,11 +72,17 @@ pub fn compute_genome_stability(
     let resolved = resolve_panels(gene_index, species);
     let n_cells = accessor.n_cells();
 
-    let mut gene_to_mask: BTreeMap<u32, u8> = BTreeMap::new();
+    // u16 mask supports up to 16 panels (currently 6).
+    assert!(
+        resolved.len() <= 16,
+        "genome_stability panel mask supports at most 16 panels (have {})",
+        resolved.len()
+    );
+    let mut gene_to_mask: BTreeMap<u32, u16> = BTreeMap::new();
     for (panel_idx, panel) in resolved.iter().enumerate() {
         for &gene_id in &panel.mapped_gene_ids {
             let entry = gene_to_mask.entry(gene_id).or_insert(0);
-            *entry |= 1u8 << panel_idx;
+            *entry |= 1u16 << panel_idx;
         }
     }
 
@@ -98,11 +104,13 @@ pub fn compute_genome_stability(
         }
 
         accessor.for_cell(cell, &mut |gene_id, value| {
-            if let Some(mask) = gene_to_mask.get(&gene_id) {
-                for panel_idx in 0..resolved.len() {
-                    if (*mask & (1u8 << panel_idx)) != 0 {
-                        buffers[panel_idx].push(value);
-                    }
+            if let Some(&mask) = gene_to_mask.get(&gene_id) {
+                // Iterate set bits only (typically ≤2 panels per gene).
+                let mut m = mask;
+                while m != 0 {
+                    let panel_idx = m.trailing_zeros() as usize;
+                    buffers[panel_idx].push(value);
+                    m &= m - 1;
                 }
             }
         });
@@ -339,16 +347,14 @@ fn mean(values: &[f32]) -> f32 {
 }
 
 fn median_in_place(values: &mut [f32]) -> f32 {
+    // Ceiling-indexed quantile rule, matching `report::quantile_sorted`.
     if values.is_empty() {
         return 0.0;
     }
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let mid = values.len() / 2;
-    if values.len() % 2 == 0 {
-        (values[mid - 1] + values[mid]) * 0.5
-    } else {
-        values[mid]
-    }
+    let n = values.len();
+    let idx = (((n - 1) as f32) * 0.5).ceil() as usize;
+    values[idx.min(n - 1)]
 }
 
 #[cfg(test)]
@@ -371,9 +377,10 @@ mod tests {
 
     #[test]
     fn median_even_and_odd() {
+        // Ceiling-indexed: even n picks the upper middle value.
         let mut odd = vec![3.0, 1.0, 2.0];
         let mut even = vec![4.0, 1.0, 2.0, 3.0];
         assert_eq!(median_in_place(&mut odd), 2.0);
-        assert_eq!(median_in_place(&mut even), 2.5);
+        assert_eq!(median_in_place(&mut even), 3.0);
     }
 }

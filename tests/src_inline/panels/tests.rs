@@ -10,6 +10,7 @@ fn fake_gene_index(symbols: &[&str]) -> GeneIndex {
     GeneIndex {
         gene_id_by_feature,
         symbols_by_gene_id,
+        has_duplicates: false,
     }
 }
 

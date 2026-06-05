@@ -1,6 +1,4 @@
-use std::cell::Cell;
 use std::collections::BTreeMap;
-use std::fmt::from_fn;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -17,8 +15,8 @@ use crate::panels::{PanelAudit, PanelScores, PanelSet};
 use crate::report::json::render_summary_json;
 use crate::report::text::render_report_text;
 use crate::report::{
-    NamedStats, RegimeStat, ReportContext, SummaryData, bool_fraction, format_f32_6, median, p10,
-    p90, p99,
+    NamedStats, RegimeStat, ReportContext, SummaryData, bool_fraction, format_f32_6, median,
+    median_p10, p10, p90, triple_quantiles,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -460,6 +458,9 @@ fn write_panels_report(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<
         let size_defined = audit.as_ref().map(|a| a.panel_size_defined).unwrap_or(0);
         let size_mappable = audit.as_ref().map(|a| a.panel_size_mappable).unwrap_or(0);
 
+        let (cov_median, cov_p10) = median_p10(&coverage);
+        let (sum_median, sum_p90, sum_p99) = triple_quantiles(&sums);
+
         writeln!(
             w,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -469,11 +470,11 @@ fn write_panels_report(input: &Stage7Input<'_>, path: &Path) -> std::io::Result<
             size_defined,
             size_mappable,
             missing,
-            format_f32_6(median(&coverage)),
-            format_f32_6(p10(&coverage)),
-            format_f32_6(median(&sums)),
-            format_f32_6(p90(&sums)),
-            format_f32_6(p99(&sums)),
+            format_f32_6(cov_median),
+            format_f32_6(cov_p10),
+            format_f32_6(sum_median),
+            format_f32_6(sum_p90),
+            format_f32_6(sum_p99),
         )?;
     }
 
@@ -589,18 +590,22 @@ fn build_summary(input: &Stage7Input<'_>, mode: ReportMode) -> SummaryData {
 }
 
 fn top_rls_contributors(input: &Stage7Input<'_>) -> Vec<String> {
-    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
     for drivers in &input.drivers.rls {
         for (name, _val) in drivers {
-            *counts.entry(name.clone()).or_insert(0) += 1;
+            *counts.entry(*name).or_insert(0) += 1;
         }
     }
     let mut items = counts.into_iter().collect::<Vec<_>>();
     items.sort_by(|a, b| match b.1.cmp(&a.1) {
-        std::cmp::Ordering::Equal => a.0.cmp(&b.0),
+        std::cmp::Ordering::Equal => a.0.cmp(b.0),
         other => other,
     });
-    items.into_iter().take(3).map(|(n, _)| n).collect()
+    items
+        .into_iter()
+        .take(3)
+        .map(|(n, _)| n.to_string())
+        .collect()
 }
 
 fn confidence_breakdown_median(values: &[[f32; 4]]) -> [f32; 4] {
@@ -782,11 +787,12 @@ fn write_text(path: &Path, contents: &str) -> std::io::Result<()> {
 }
 
 fn named_stats(name: &'static str, values: &[f32]) -> NamedStats {
+    let (med, p_90, p_99) = triple_quantiles(values);
     NamedStats {
         name,
-        median: median(values),
-        p90: p90(values),
-        p99: p99(values),
+        median: med,
+        p90: p_90,
+        p99: p_99,
     }
 }
 
@@ -804,44 +810,33 @@ fn fraction_threshold(values: &[f32], predicate: impl Fn(f32) -> bool) -> f32 {
 }
 
 fn format_flags(flags: &[Flag]) -> String {
-    let order = flag_order();
-    let idx = Cell::new(0usize);
-    let wrote_any = Cell::new(false);
-    from_fn(|f| {
-        while idx.get() < order.len() {
-            let flag = order[idx.get()];
-            idx.set(idx.get() + 1);
-            if !flags.contains(&flag) {
-                continue;
-            }
-            if wrote_any.get() {
-                f.write_str(",")?;
-            } else {
-                wrote_any.set(true);
-            }
-            f.write_str(flag_name(flag))?;
+    let mut out = String::new();
+    let mut wrote_any = false;
+    for &flag in flag_order() {
+        if !flags.contains(&flag) {
+            continue;
         }
-        Ok(())
-    })
-    .to_string()
+        if wrote_any {
+            out.push(',');
+        }
+        out.push_str(flag_name(flag));
+        wrote_any = true;
+    }
+    out
 }
 
-fn format_drivers(drivers: &[(String, f32)]) -> String {
-    let idx = Cell::new(0usize);
-    from_fn(|f| {
-        while idx.get() < drivers.len() {
-            let (name, value) = &drivers[idx.get()];
-            idx.set(idx.get() + 1);
-            if idx.get() > 1 {
-                f.write_str(",")?;
-            }
-            f.write_str(name)?;
-            f.write_str(":")?;
-            f.write_fmt(format_args!("{:.6}", *value))?;
+fn format_drivers(drivers: &[(&'static str, f32)]) -> String {
+    let mut out = String::with_capacity(drivers.len() * 16);
+    for (i, (name, value)) in drivers.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
         }
-        Ok(())
-    })
-    .to_string()
+        out.push_str(name);
+        out.push(':');
+        use std::fmt::Write as _;
+        let _ = write!(out, "{:.6}", *value);
+    }
+    out
 }
 
 fn top_program_panel(
@@ -883,7 +878,7 @@ fn program_panel_indices(panel_set: &PanelSet) -> Vec<usize> {
 }
 
 fn stats(values: &[f32]) -> (f32, f32, f32) {
-    (median(values), p90(values), p99(values))
+    triple_quantiles(values)
 }
 
 fn majority_regime<'a>(counts: &BTreeMap<&'a str, usize>, order: &'a [&'a str]) -> &'a str {

@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use kira_scio::api::{Reader, ReaderOptions};
@@ -11,11 +10,13 @@ pub fn find_matrix_path(input_dir: &Path) -> Result<PathBuf, InputError> {
     Ok(ds.matrix)
 }
 
+/// Per-cell CSC view after feature→gene_id remapping. `cols[cell]` is sorted
+/// by gene_id ascending with no duplicate gene_ids.
 #[derive(Debug, Clone)]
 pub struct CscMatrix {
     pub n_rows: usize,
     pub n_cols: usize,
-    pub cols: Vec<Vec<(u32, i64)>>,
+    pub cols: Vec<Vec<(u32, f32)>>,
 }
 
 pub fn read_mtx_csc(
@@ -47,36 +48,34 @@ pub fn read_mtx_csc(
         )));
     }
 
-    let mut per_col: Vec<BTreeMap<u32, i64>> = vec![BTreeMap::new(); matrix.n_cells];
+    let mut cols_vec: Vec<Vec<(u32, f32)>> = Vec::with_capacity(matrix.n_cells);
 
-    for (col_idx, window) in matrix.col_ptr.windows(2).enumerate() {
-        let start = window[0];
-        let end = window[1];
+    // Without duplicate symbols the gene_ids are already increasing (just
+    // filter + copy); otherwise dedup_sort_merge collapses equal gene_ids.
+    for window in matrix.col_ptr.windows(2) {
+        let start = window[0] as usize;
+        let end = window[1] as usize;
+        let mut col: Vec<(u32, f32)> = Vec::with_capacity(end - start);
+
         for idx in start..end {
-            let feature_idx = matrix.row_idx[idx];
-            let val_f = matrix.values[idx];
-            if val_f == 0.0 {
+            let feature_idx = matrix.row_idx[idx] as usize;
+            let val = matrix.values[idx];
+            if val == 0.0 {
                 continue;
             }
-            let val = val_f as i64;
             if let Some(gene_id) = gene_index
                 .gene_id_by_feature
                 .get(feature_idx)
                 .and_then(|v| *v)
             {
-                let entry = per_col[col_idx].entry(gene_id as u32).or_insert(0);
-                *entry += val;
+                col.push((gene_id as u32, val));
             }
         }
-    }
 
-    let mut cols_vec: Vec<Vec<(u32, i64)>> = Vec::with_capacity(matrix.n_cells);
-    for map in per_col {
-        let mut col_vec = Vec::with_capacity(map.len());
-        for (gene, v) in map {
-            col_vec.push((gene, v));
+        if gene_index.has_duplicates {
+            dedup_sort_merge(&mut col);
         }
-        cols_vec.push(col_vec);
+        cols_vec.push(col);
     }
 
     Ok(CscMatrix {
@@ -84,4 +83,22 @@ pub fn read_mtx_csc(
         n_cols: matrix.n_cells,
         cols: cols_vec,
     })
+}
+
+/// Sort by gene_id ascending, then in-place merge equal gene_ids by summing.
+pub(crate) fn dedup_sort_merge(col: &mut Vec<(u32, f32)>) {
+    if col.len() <= 1 {
+        return;
+    }
+    col.sort_by_key(|&(g, _)| g);
+    let mut write = 0usize;
+    for read in 1..col.len() {
+        if col[read].0 == col[write].0 {
+            col[write].1 += col[read].1;
+        } else {
+            write += 1;
+            col[write] = col[read];
+        }
+    }
+    col.truncate(write + 1);
 }

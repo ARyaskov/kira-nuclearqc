@@ -17,7 +17,10 @@ pub struct Axes {
 #[derive(Debug, Clone, Default)]
 pub struct AxisDrivers {
     pub expressed_genes: u32,
+    /// Raw Shannon entropy (diagnostic only; not comparable to [0..1] thresholds).
     pub gene_entropy: f32,
+    /// Normalized Shannon entropy in [0, 1]; use this for thresholding.
+    pub gene_entropy_norm: f32,
     pub panel_entropy: f32,
     pub max_program_share: f32,
     pub tf_entropy: f32,
